@@ -1,54 +1,107 @@
-# dsh-native
+<p align="center"><img src="build/icon.png" width="128" alt="DSH Native terminal icon" /></p>
 
-A native Electron shell for https web apps with a saved server list. Point it at your web app, and it runs in a dedicated desktop window — no browser chrome, no tabs, just your app.
+# DSH Native
 
-## Features
+[![CI](https://github.com/leonardoxr/dsh-native/actions/workflows/ci.yml/badge.svg)](https://github.com/leonardoxr/dsh-native/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/leonardoxr/dsh-native?display_name=tag&sort=semver)](https://github.com/leonardoxr/dsh-native/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-- **Https-only server list** — saved servers are restricted to `https://` URLs; add, pick, and manage them from a simple built-in UI.
-- **Auto-reconnect** — automatically reconnects to the last used server on launch.
-- **GPU-accelerated** — hardware acceleration enabled for smooth rendering.
-- **No background throttling** — the app keeps running at full speed when unfocused or minimized.
+A focused desktop shell for HTTPS web apps—with saved servers, fast reconnects, and a first-class workflow for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
-## Getting started
+DSH Native keeps frequently used web apps in a dedicated Electron window: no browser tabs or address bar, just the app you connected to. It remembers multiple servers and opens the most recently used one at launch.
 
-```sh
-npm install
-npm start
-```
+## Highlights
 
-Requires Node.js and npm. The first run starts with an empty server list — add your first https server from the app's UI.
+- **Saved server list** — add, name, remove, and switch between HTTPS endpoints.
+- **Fast return** — reconnects to the most recently used server on launch and preconnects while the window starts.
+- **Focused window** — external links open in the system browser instead of spawning extra app windows.
+- **Responsive in the background** — renderer and timer throttling are disabled so long-running apps remain live.
+- **Hardened boundary** — remote pages use context isolation with Node.js integration disabled; privileged host-management APIs stay local, and cross-origin navigation opens in the system browser.
 
-## DeepSeek Harness companion plugin
+## Download
 
-When the remote app is a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) web UI, install the companion plugin — **[dsh-companion](https://github.com/leonardoxr/dsh-companion)**, an out-of-tree harness plugin — and the shell becomes a cross-host project manager: one window, many Harness hosts, all workspaces and sessions in a single view.
+Prebuilt installers and portable packages are published on the [Releases page](https://github.com/leonardoxr/dsh-native/releases):
 
-The plugin exposes plain JSON endpoints on the host's webserver — `GET /api/companion/workspaces`, `GET /api/companion/sessions`, and `GET /api/companion/session/<id>` — so a native client can render project/session lists without booting the full web app. See the [plugin README](https://github.com/leonardoxr/dsh-companion#install) for the one-row cordis.yml install.
+| Platform | Release artifacts |
+| --- | --- |
+| Windows x64 | NSIS installer and portable executable |
+| macOS Intel | DMG and ZIP |
+| macOS Apple silicon | DMG and ZIP |
+| Linux x64 | AppImage and Debian package |
 
-Serving the UI through a proxy that rewrites the `Host` header (for example Tailscale Serve)? Add your public authority to the trust fence, otherwise API calls get HTTP 403:
+> [!IMPORTANT]
+> Release binaries are currently **unsigned**. Windows SmartScreen and macOS Gatekeeper may warn before first launch. Verify the file against the release's `SHA256SUMS.txt`. Code signing is planned; see [release documentation](docs/RELEASING.md).
+
+### Use DSH Native
+
+1. Launch DSH Native.
+2. Add a display name and an `https://` URL.
+3. Select the server to connect.
+4. Use **App → Servers…** or <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>H</kbd> to return to the server list.
+
+Only HTTPS URLs can be saved. Add servers you trust: connected sites run inside the desktop window and retain normal Chromium site storage in DSH Native's per-user application profile. The server list and performance log are stored locally in Electron's `userData` directory.
+
+## DeepSeek Harness companion
+
+When the remote app is a DeepSeek Harness web UI, install [dsh-companion](https://github.com/leonardoxr/dsh-companion), an out-of-tree Harness plugin. It exposes lightweight project and session endpoints so a native client can provide one view across Harness hosts.
+
+If a proxy rewrites the `Host` header—for example, Tailscale Serve—add its public authority to the Harness trust fence:
 
 ```sh
 dsh web --trusted-host your-host.example.net
 ```
 
-### Roadmap
+See the [companion installation guide](https://github.com/leonardoxr/dsh-companion#install) for details.
 
-- Multi-host tabs: keep every connected host loaded (not rendered) and switch instantly.
-- Push badges via projected forwarded events instead of polling.
-- Cold (persisted-only) session summaries.
+## Develop locally
 
-## Project layout
+### Requirements
 
+- Node.js 22.12 or newer
+- npm 10 or newer
+- A supported Windows, macOS, or Linux desktop
+
+```sh
+git clone https://github.com/leonardoxr/dsh-native.git
+cd dsh-native
+npm ci
+npm start
 ```
-dsh-native/
-├── package.json            # App metadata and scripts (npm start → electron .)
-├── src/
-│   ├── main.js             # Electron main process: window + server list management
-│   ├── preload.js          # Context-isolated bridge between main and renderer
-│   └── renderer/
-│       ├── index.html      # Shell UI: server list and connection screen
-│       ├── app.js          # Renderer logic
-│       └── styles.css      # Shell styles
+
+Run the same checks used by CI:
+
+```sh
+npm run check
+npm test
 ```
+
+Create an unpacked app for the current platform with `npm run package`, or distributable installers with `npm run dist`. Outputs are written to `dist/`.
+
+### Project layout
+
+```text
+src/
+├── main.js                 Electron main process and server management
+├── preload.js              Context-isolated bridge for the local picker
+├── lib/                    Testable URL and navigation security policies
+└── renderer/               Bundled server-picker HTML, CSS, and JavaScript
+test/                       Node.js unit tests
+.github/                    CI, releases, and contribution templates
+docs/RELEASING.md           Maintainer release process
+```
+
+## Contributing
+
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request, use the issue templates for bugs and ideas, and follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+Please report security issues privately as described in [SECURITY.md](SECURITY.md), not in a public issue.
+
+## Roadmap
+
+- Multi-host tabs that keep connected hosts loaded for instant switching.
+- Push badges through forwarded events instead of polling.
+- Cold, persisted-only session summaries.
+- Signed release binaries and automated update metadata.
 
 ## License
 

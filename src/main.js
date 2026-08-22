@@ -3,8 +3,11 @@ const bootStart = performance.now()
 
 const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron')
 const path = require('node:path')
+const { pathToFileURL } = require('node:url')
 const fs = require('node:fs')
 const crypto = require('node:crypto')
+const { normalizeUrl } = require('./lib/normalize-url')
+const { classifyNavigation } = require('./lib/navigation-policy')
 
 // Keep rendering and timers at full rate even when the window is occluded or
 // minimized: the app must stay live and snap back instantly. Switches must be
@@ -53,22 +56,34 @@ function saveHosts(hosts) {
   fs.writeFileSync(hostsFile(), JSON.stringify(hosts, null, 2))
 }
 
-/**
- * Only https URLs are accepted for now.
- * @param {string} input
- * @returns {string | null} normalized URL, or null when invalid
- */
-function normalizeUrl(input) {
-  try {
-    const url = new URL(input.trim())
-    if (url.protocol !== 'https:') return null
-    return url.toString()
-  } catch {
-    return null
-  }
-}
+const pickerUrl = pathToFileURL(path.join(__dirname, 'renderer', 'index.html')).href
+const trustedOrigins = new WeakMap()
 
 let mainWindow = null
+
+function loadPicker(win) {
+  trustedOrigins.delete(win)
+  void win.loadFile(path.join(__dirname, 'renderer', 'index.html'))
+}
+
+function loadHost(win, targetUrl) {
+  const normalized = normalizeUrl(targetUrl)
+  if (!normalized) return false
+
+  trustedOrigins.set(win, new URL(normalized).origin)
+  // Warm the TLS/TCP sockets while the window and renderer spin up.
+  win.webContents.session.preconnect({ url: normalized, numSockets: 2 })
+  void win.loadURL(normalized)
+  return true
+}
+
+function guardNavigation(win, event, targetUrl) {
+  const decision = classifyNavigation(trustedOrigins.get(win), targetUrl)
+  if (decision.action === 'allow') return
+
+  event.preventDefault()
+  if (decision.action === 'external') void shell.openExternal(decision.url)
+}
 
 function createWindow(targetUrl) {
   const win = new BrowserWindow({
@@ -78,18 +93,22 @@ function createWindow(targetUrl) {
     show: false,
     backgroundColor: '#1f1f1f',
     webPreferences: {
-      spellcheck: false,
       // Never throttle this window's own rendering when hidden.
       backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.js'),
       spellcheck: false,
     },
   })
 
-  // Open target=_blank / window.open in the OS browser instead of a new Electron window.
+  // Keep remote content on the selected HTTPS origin. Cross-origin destinations
+  // open in the system browser, where the address and certificate are visible.
+  win.webContents.on('will-navigate', (event, url) => guardNavigation(win, event, url))
+  win.webContents.on('will-redirect', (event, url) => guardNavigation(win, event, url))
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https:')) shell.openExternal(url)
+    const externalUrl = normalizeUrl(url)
+    if (externalUrl) void shell.openExternal(externalUrl)
     return { action: 'deny' }
   })
 
@@ -98,13 +117,7 @@ function createWindow(targetUrl) {
     perfLog(`first paint ready in ${(performance.now() - bootStart).toFixed(0)}ms`)
   })
 
-  if (targetUrl) {
-    // Warm the TLS/TCP sockets while the window and renderer spin up.
-    win.webContents.session.preconnect({ url: targetUrl, numSockets: 2 })
-    win.loadURL(targetUrl)
-  } else {
-    win.loadFile(path.join(__dirname, 'renderer', 'index.html'))
-  }
+  if (!targetUrl || !loadHost(win, targetUrl)) loadPicker(win)
 
   win.webContents.once('did-finish-load', () => {
     perfLog(`page loaded in ${(performance.now() - bootStart).toFixed(0)}ms`)
@@ -112,10 +125,9 @@ function createWindow(targetUrl) {
   return win
 }
 
-
 function showHome() {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'))
+    loadPicker(mainWindow)
   } else {
     mainWindow = createWindow(null)
   }
@@ -147,9 +159,19 @@ app.on('window-all-closed', () => {
 
 // --- IPC: host list management -------------------------------------------
 
-ipcMain.handle('hosts:list', () => getHosts())
+function requirePicker(event) {
+  if (event.senderFrame.url !== pickerUrl) {
+    throw new Error('Host management is available only from the local server picker.')
+  }
+}
 
-ipcMain.handle('hosts:add', (_event, { name, url }) => {
+ipcMain.handle('hosts:list', (event) => {
+  requirePicker(event)
+  return getHosts()
+})
+
+ipcMain.handle('hosts:add', (event, { name, url }) => {
+  requirePicker(event)
   const normalized = normalizeUrl(url)
   if (!normalized) throw new Error('Only valid https:// URLs are supported.')
   const hosts = getHosts()
@@ -170,21 +192,22 @@ ipcMain.handle('hosts:add', (_event, { name, url }) => {
   return host
 })
 
-ipcMain.handle('hosts:remove', (_event, id) => {
+ipcMain.handle('hosts:remove', (event, id) => {
+  requirePicker(event)
   saveHosts(getHosts().filter((h) => h.id !== id))
 })
 
 ipcMain.handle('hosts:connect', (event, id) => {
+  requirePicker(event)
   const host = getHosts().find((h) => h.id === id)
   if (!host) throw new Error('Unknown server.')
   host.lastUsedAt = Date.now()
   saveHosts([host, ...getHosts().filter((h) => h.id !== host.id)])
 
   const win = BrowserWindow.fromWebContents(event.sender)
-  win.loadURL(host.url)
+  if (!win || !loadHost(win, host.url)) throw new Error('The saved server URL is invalid.')
 })
 
-ipcMain.handle('app:goHome', () => showHome())
 
 // Minimal menu so users can always get back to the server list.
 Menu.setApplicationMenu(

@@ -1,13 +1,87 @@
 {
   "name": "dsh-native",
   "version": "0.1.0",
-  "description": "Native shell for https web apps with a saved server list",
+  "description": "A focused desktop shell for HTTPS web apps, with saved servers and fast reconnects.",
   "main": "src/main.js",
   "type": "commonjs",
+  "private": true,
+  "author": "leonardoxr",
+  "license": "MIT",
+  "homepage": "https://github.com/leonardoxr/dsh-native#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leonardoxr/dsh-native.git"
+  },
+  "bugs": {
+    "url": "https://github.com/leonardoxr/dsh-native/issues"
+  },
+  "keywords": [
+    "desktop",
+    "deepseek-harness",
+    "electron",
+    "https",
+    "web-app"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "check": "node --check src/main.js && node --check src/preload.js && node --check src/renderer/app.js && node --check src/lib/normalize-url.js && node --check src/lib/navigation-policy.js",
+    "test": "node --test",
+    "package": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "dev.leonardoxr.dshnative",
+    "productName": "DSH Native",
+    "asar": true,
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "LICENSE",
+      "package.json"
+    ],
+    "artifactName": "DSH-Native-${version}-${os}-${arch}.${ext}",
+    "win": {
+      "icon": "build/icons/win/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "artifactName": "DSH-Native-Setup-${version}-${os}-${arch}.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "portable": {
+      "artifactName": "DSH-Native-Portable-${version}-${os}-${arch}.${ext}"
+    },
+    "mac": {
+      "category": "public.app-category.utilities",
+      "icon": "build/icons/mac/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "linux": {
+      "category": "Utility",
+      "icon": "build/icons/png",
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    }
   },
   "devDependencies": {
-    "electron": "^33.0.0"
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3"
   }
 }

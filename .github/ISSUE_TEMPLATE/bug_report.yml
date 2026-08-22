@@ -1,0 +1,61 @@
+name: Bug report
+description: Report a reproducible problem in DSH Native
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report a problem. Do not include secrets or security vulnerabilities here.
+  - type: input
+    id: version
+    attributes:
+      label: DSH Native version
+      description: Use the release tag or package version.
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS (Intel)
+        - macOS (Apple silicon)
+        - Linux
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the actual and expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open DSH Native
+        2. Add ...
+        3. Select ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and screenshots
+      description: Add relevant screenshots or sanitized output. Remove server addresses, tokens, and personal data.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues for duplicates.
+          required: true
+        - label: I reproduced this with the latest release.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true
