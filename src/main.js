@@ -1,13 +1,15 @@
 'use strict'
 const bootStart = performance.now()
 
-const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu, Notification, shell } = require('electron')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const fs = require('node:fs')
 const crypto = require('node:crypto')
 const { normalizeUrl } = require('./lib/normalize-url')
 const { classifyNavigation } = require('./lib/navigation-policy')
+const { NotificationFeed } = require('./lib/notification-feed')
+const { createNotificationPresenter } = require('./lib/notification-presenter')
 
 // Keep rendering and timers at full rate even when the window is occluded or
 // minimized: the app must stay live and snap back instantly. Switches must be
@@ -32,6 +34,8 @@ for (const flag of [
 ]) {
   app.commandLine.appendSwitch(flag)
 }
+
+if (process.platform === 'win32') app.setAppUserModelId('dev.leonardoxr.dshnative')
 
 /** Persisted server list: [{ id, name, url, lastUsedAt }] */
 const hostsFile = () => path.join(app.getPath('userData'), 'hosts.json')
@@ -60,8 +64,15 @@ const pickerUrl = pathToFileURL(path.join(__dirname, 'renderer', 'index.html')).
 const trustedOrigins = new WeakMap()
 
 let mainWindow = null
+let notificationFeed = null
+
+const presentNotification = createNotificationPresenter({
+  Notification,
+  getWindow: () => mainWindow,
+})
 
 function loadPicker(win) {
+  notificationFeed?.stop()
   trustedOrigins.delete(win)
   void win.loadFile(path.join(__dirname, 'renderer', 'index.html'))
 }
@@ -71,6 +82,7 @@ function loadHost(win, targetUrl) {
   if (!normalized) return false
 
   trustedOrigins.set(win, new URL(normalized).origin)
+  notificationFeed?.start(normalized, win.webContents.session.fetch.bind(win.webContents.session))
   // Warm the TLS/TCP sockets while the window and renderer spin up.
   win.webContents.session.preconnect({ url: normalized, numSockets: 2 })
   void win.loadURL(normalized)
@@ -122,6 +134,10 @@ function createWindow(targetUrl) {
   win.webContents.once('did-finish-load', () => {
     perfLog(`page loaded in ${(performance.now() - bootStart).toFixed(0)}ms`)
   })
+  win.once('closed', () => {
+    notificationFeed?.stop()
+    if (mainWindow === win) mainWindow = null
+  })
   return win
 }
 
@@ -134,6 +150,8 @@ function showHome() {
 }
 
 app.whenReady().then(() => {
+  notificationFeed = new NotificationFeed({ onNotification: presentNotification })
+
   const mostRecent = getHosts()
     .slice()
     .sort((a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0))[0]
@@ -152,6 +170,8 @@ app.whenReady().then(() => {
     perfLog(`gpu settled: ${JSON.stringify(app.getGPUFeatureStatus())}`)
   }, 5000)
 })
+
+app.on('before-quit', () => notificationFeed?.stop())
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

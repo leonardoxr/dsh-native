@@ -16,6 +16,7 @@ DSH Native keeps frequently used web apps in a dedicated Electron window: no bro
 - **Fast return** — reconnects to the most recently used server on launch and preconnects while the window starts.
 - **Focused window** — external links open in the system browser instead of spawning extra app windows.
 - **Responsive in the background** — renderer and timer throttling are disabled so long-running apps remain live.
+- **Native attention alerts** — companion events become deduplicated OS notifications for completed, blocked, failed, question, and approval states.
 - **Hardened boundary** — remote pages use context isolation with Node.js integration disabled; privileged host-management APIs stay local, and cross-origin navigation opens in the system browser.
 
 ## Download
@@ -54,7 +55,9 @@ Only HTTPS URLs can be saved. Add servers you trust: connected sites run inside 
 
 ## DeepSeek Harness companion
 
-When the remote app is a DeepSeek Harness web UI, install [dsh-companion](https://github.com/leonardoxr/dsh-companion), an out-of-tree Harness plugin. It exposes lightweight project and session endpoints so a native client can provide one view across Harness hosts.
+When the remote app is a DeepSeek Harness web UI, install [dsh-companion](https://github.com/leonardoxr/dsh-companion), an out-of-tree Harness plugin. It exposes lightweight project/session endpoints and a filtered notification event feed. DSH Native connects to that feed directly from its main process—remote page content never receives a privileged desktop-notification API.
+
+Notifications are shown only while DSH Native is running and its window is not focused. Clicking one restores and focuses the app. Reconnect cursors and stable event keys prevent duplicate alerts during ordinary network interruptions. Choose which turn outcomes, questions, approvals, and subagent events are forwarded in the companion plugin's Harness settings. Closing the app window stops the feed; on Windows and Linux it also exits DSH Native. Keep the window open or minimized to continue receiving alerts.
 
 If a proxy rewrites the `Host` header—for example, Tailscale Serve—add its public authority to the Harness trust fence:
 
@@ -94,7 +97,7 @@ Create an unpacked app for the current platform with `npm run package`, or distr
 src/
 ├── main.js                 Electron main process and server management
 ├── preload.js              Context-isolated bridge for the local picker
-├── lib/                    Testable URL and navigation security policies
+├── lib/                    URL policy, SSE feed, deduplication, and notification presentation
 └── renderer/               Bundled server-picker HTML, CSS, and JavaScript
 test/                       Node.js unit tests
 .github/                    CI, releases, and contribution templates
@@ -110,7 +113,7 @@ Please report security issues privately as described in [SECURITY.md](SECURITY.m
 ## Roadmap
 
 - Multi-host tabs that keep connected hosts loaded for instant switching.
-- Push badges through forwarded events instead of polling.
+- Unread badges and per-session notification routing.
 - Cold, persisted-only session summaries.
 - Signed release binaries and automated update metadata.
 
