@@ -1,0 +1,13 @@
+{
+  "name": "dsh-native",
+  "version": "0.1.0",
+  "description": "Native shell for https web apps with a saved server list",
+  "main": "src/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}

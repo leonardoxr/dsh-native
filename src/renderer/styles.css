@@ -1,0 +1,81 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+}
+
+main {
+  width: min(560px, 90vw);
+}
+
+h1 {
+  margin-bottom: 0.25rem;
+}
+
+.hint {
+  color: gray;
+  margin-top: 0;
+}
+
+form {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+input {
+  flex: 1;
+  padding: 0.5rem;
+}
+
+button {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+
+.error {
+  color: crimson;
+}
+
+ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+}
+
+.connect {
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.url {
+  flex: 1;
+  color: gray;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remove {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: gray;
+}

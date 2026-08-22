@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Servers</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main>
+    <h1>Servers</h1>
+    <p class="hint">Add an https server, then pick one to connect.</p>
+
+    <form id="add-form">
+      <input id="name" type="text" placeholder="Name (optional)" autocomplete="off" />
+      <input id="url" type="url" placeholder="https://host:port" required />
+      <button type="submit">Add</button>
+    </form>
+    <p id="error" class="error" hidden></p>
+
+    <ul id="host-list"></ul>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
