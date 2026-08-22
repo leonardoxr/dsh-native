@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+### Added
+
+- Native SwiftUI companion for iPhone and iPad with a saved HTTPS host picker and governed WebKit shell.
+- Deterministic iOS URL, navigation, persistence, and state tests plus reusable local-Mac SSH build scripts.
+- iOS privacy manifest, launch experience, original app icon, app-switcher privacy cover, and clear website-data controls.
+
+### Security
+
+- Keep iOS remote content behind normal WebKit and system TLS checks with no JavaScript-to-native bridge.
+- Block automatic cross-origin main-frame navigation and open only user-activated safe external links.
+
 ## [0.1.1] - 2026-08-22
 
 ### Fixed

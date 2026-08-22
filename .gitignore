@@ -11,6 +11,12 @@ node_modules/
 # Build output
 dist/
 
+# Xcode output and user state
+ios/build/
+ios/DerivedData/
+*.xcuserstate
+xcuserdata/
+
 # OS artifacts
 .DS_Store
 Thumbs.db

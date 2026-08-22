@@ -6,9 +6,9 @@
 [![Latest release](https://img.shields.io/github/v/release/leonardoxr/dsh-native?display_name=tag&sort=semver)](https://github.com/leonardoxr/dsh-native/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A focused desktop shell for HTTPS web apps—with saved servers, fast reconnects, and a first-class workflow for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
+A focused native shell for HTTPS web apps—with saved servers, fast reconnects, and a first-class workflow for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
-DSH Native keeps frequently used web apps in a dedicated Electron window: no browser tabs or address bar, just the app you connected to. It remembers multiple servers and opens the most recently used one at launch.
+DSH Native keeps frequently used web apps out of ordinary browser tabs. The repository includes the cross-platform Electron desktop app and a native SwiftUI companion for iPhone and iPad. Both remember multiple trusted servers and return to the most recently used one at launch.
 
 ## Highlights
 
@@ -17,7 +17,8 @@ DSH Native keeps frequently used web apps in a dedicated Electron window: no bro
 - **Focused window** — external links open in the system browser instead of spawning extra app windows.
 - **Responsive in the background** — renderer and timer throttling are disabled so long-running apps remain live.
 - **Native attention alerts** — companion events become deduplicated OS notifications for completed, blocked, failed, question, and approval states.
-- **Hardened boundary** — remote pages use context isolation with Node.js integration disabled; privileged host-management APIs stay local, and cross-origin navigation opens in the system browser.
+- **Hardened boundary** — remote pages receive no native host-management capability, and cross-origin navigation opens in the system browser.
+- **Native mobile companion** — a polished SwiftUI and WebKit implementation supports iPhone and iPad without Electron or third-party runtime dependencies.
 
 ## Download
 
@@ -53,6 +54,12 @@ This workaround is necessary only until releases are Developer ID signed and not
 
 Only HTTPS URLs can be saved. Add servers you trust: connected sites run inside the desktop window and retain normal Chromium site storage in DSH Native's per-user application profile. The server list and performance log are stored locally in Electron's `userData` directory.
 
+## iPhone and iPad companion
+
+The [`ios/`](ios/) project is a native SwiftUI companion for iOS and iPadOS 17 or newer. It includes a saved-host picker, automatic reconnection, persistent WebKit sessions, strict top-level selected-origin navigation, native browser controls, website-data clearing, privacy metadata, and deterministic unit tests.
+
+The iOS source compiles and its simulator suite runs on the project's local Apple-silicon Mac. It is not currently distributed as an installable release: stock iOS requires code signing even for personal-device installation. Use Xcode automatic personal-team signing for your own device, or configure an Apple Developer account before TestFlight/App Store distribution. See [`ios/README.md`](ios/README.md) and the reusable [`scripts/build-ios-remote.ps1`](scripts/build-ios-remote.ps1) helper.
+
 ## DeepSeek Harness companion
 
 When the remote app is a DeepSeek Harness web UI, install [dsh-companion](https://github.com/leonardoxr/dsh-companion), an out-of-tree Harness plugin. It exposes lightweight project/session endpoints and a filtered notification event feed. DSH Native connects to that feed directly from its main process—remote page content never receives a privileged desktop-notification API.
@@ -74,6 +81,7 @@ See the [companion installation guide](https://github.com/leonardoxr/dsh-compani
 - Node.js 22.12 or newer
 - npm 10 or newer
 - A supported Windows, macOS, or Linux desktop
+- For iOS work: an Apple-silicon Mac with Xcode 26 and XcodeGen 2.46
 
 ```sh
 git clone https://github.com/leonardoxr/dsh-native.git
@@ -100,6 +108,8 @@ src/
 ├── lib/                    URL policy, SSE feed, deduplication, and notification presentation
 └── renderer/               Bundled server-picker HTML, CSS, and JavaScript
 test/                       Node.js unit tests
+ios/                        Native SwiftUI iPhone/iPad app and tests
+scripts/                    Reusable local and remote build helpers
 .github/                    CI, releases, and contribution templates
 docs/RELEASING.md           Maintainer release process
 ```

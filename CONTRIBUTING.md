@@ -24,6 +24,8 @@ npm start
 
 The server picker starts empty on a new profile. Add an HTTPS endpoint you control for manual testing.
 
+For iOS work, install Xcode 26 and XcodeGen on an Apple-silicon Mac. Run `ios/scripts/build.sh` on that Mac, or use `./scripts/build-ios-remote.ps1` from Windows with a configured SSH host. The iOS-specific architecture and signing notes are in [`ios/README.md`](ios/README.md).
+
 ## Project checks
 
 Run these commands before submitting a pull request:
@@ -42,7 +44,8 @@ CI repeats these checks. Maintainers build all release targets from version tags
 
 ## Code guidelines
 
-- Match the existing CommonJS style: two-space indentation, single quotes, and no semicolons.
+- Desktop code follows the existing CommonJS style: two-space indentation, single quotes, and no semicolons.
+- iOS code follows standard Swift API naming, four-space indentation, and SwiftUI composition.
 - Prefer small functions and platform APIs over new runtime dependencies.
 - Add or update tests when behavior can be exercised outside Electron.
 - Explain non-obvious Electron lifecycle or security decisions in comments.

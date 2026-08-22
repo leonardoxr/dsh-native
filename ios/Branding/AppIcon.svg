@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="surface" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#172554" />
+      <stop offset="0.5" stop-color="#111827" />
+      <stop offset="1" stop-color="#090E1A" />
+    </linearGradient>
+    <linearGradient id="accent" x1="252" y1="292" x2="786" y2="742" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#67E8F9" />
+      <stop offset="0.55" stop-color="#38BDF8" />
+      <stop offset="1" stop-color="#A78BFA" />
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="18" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#surface)" />
+  <rect x="55" y="55" width="914" height="914" rx="201" fill="none" stroke="#FFFFFF" stroke-opacity="0.1" stroke-width="6" />
+  <path d="M286 312L500 512L286 712" fill="none" stroke="url(#accent)" stroke-width="92" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)" />
+  <rect x="544" y="666" width="214" height="92" rx="46" fill="url(#accent)" filter="url(#glow)" />
+</svg>

@@ -10,8 +10,8 @@ body:
     id: version
     attributes:
       label: DSH Native version
-      description: Use the release tag or package version.
-      placeholder: v0.1.0
+      description: Use the release tag/package version, or a commit SHA for an iOS source build.
+      placeholder: v0.1.1 or abc1234
     validations:
       required: true
   - type: dropdown
@@ -20,8 +20,8 @@ body:
       label: Operating system
       options:
         - Windows
-        - macOS (Intel)
         - macOS (Apple silicon)
+        - iOS / iPadOS
         - Linux
         - Other
     validations:
