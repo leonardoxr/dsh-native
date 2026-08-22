@@ -4,10 +4,10 @@ This guide is for maintainers. Release artifacts are built on GitHub-hosted runn
 
 ## Release outputs
 
-A version tag builds these unsigned targets:
+A version tag builds these targets:
 
-- Windows x64: NSIS installer and portable executable
-- macOS x64 and arm64: DMG and ZIP
+- Windows x64: unsigned NSIS installer and portable executable
+- macOS Apple silicon: ad-hoc-signed, non-notarized DMG and ZIP
 - Linux x64: AppImage and Debian package
 - SHA-256 checksum manifest covering every uploaded artifact
 
@@ -42,17 +42,20 @@ The [Release workflow](../.github/workflows/release.yml) validates the version, 
 
 ## Verify publication
 
-- Confirm all nine release files are present: two Windows, four macOS, two Linux, plus the checksum file.
+- Confirm all seven release files are present: two Windows, two macOS, two Linux, plus the checksum file.
 - Download at least one artifact and verify its digest against `SHA256SUMS.txt`.
+- Confirm the Apple silicon macOS build passed strict `codesign` verification and detected an ad-hoc signature.
 - Smoke-test launch, adding an HTTPS server, connecting, and returning with **App → Servers…**.
 - If any platform failed, fix the cause and create a new patch release. Do not replace binaries silently after publication.
 
 ## Signing roadmap
 
-The workflow deliberately sets `CSC_IDENTITY_AUTO_DISCOVERY=false`; current binaries are unsigned. Before enabling signing:
+The workflow deliberately disables certificate discovery. macOS apps use explicit ad-hoc signing (`identity: "-"`) with hardened runtime disabled; this provides bundle integrity but not Developer ID trust or notarization. Windows binaries remain unsigned.
+
+Before enabling trusted signing:
 
 - store certificates, passwords, and notarization credentials only as GitHub Actions secrets;
 - use environment protection for release secrets;
-- sign on the native platform runner;
-- add notarization for macOS and trusted code signing for Windows;
-- update the README and security policy only after signatures are verified in a published release.
+- replace ad-hoc macOS signing with a Developer ID Application certificate, re-enable hardened runtime, and notarize the result;
+- add trusted Authenticode signing for Windows;
+- retain native-runner signature checks and update public documentation only after a published release is verified.

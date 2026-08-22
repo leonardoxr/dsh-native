@@ -25,12 +25,23 @@ Prebuilt installers and portable packages are published on the [Releases page](h
 | Platform | Release artifacts |
 | --- | --- |
 | Windows x64 | NSIS installer and portable executable |
-| macOS Intel | DMG and ZIP |
 | macOS Apple silicon | DMG and ZIP |
 | Linux x64 | AppImage and Debian package |
 
+macOS releases target Apple silicon (arm64); Intel Macs are not supported.
+
 > [!IMPORTANT]
-> Release binaries are currently **unsigned**. Windows SmartScreen and macOS Gatekeeper may warn before first launch. Verify the file against the release's `SHA256SUMS.txt`. Code signing is planned; see [release documentation](docs/RELEASING.md).
+> Windows binaries are unsigned. Starting with v0.1.1, macOS apps carry an ad-hoc integrity signature but are not Apple Developer ID signed or notarized. SmartScreen or Gatekeeper may therefore require an explicit first launch. Verify the file against the release's `SHA256SUMS.txt`; see [release documentation](docs/RELEASING.md).
+
+### First launch on macOS
+
+After copying DSH Native into Applications, Control-click the app and choose **Open**. If macOS still reports that the app is damaged, first verify the DMG checksum and then clear quarantine from the copied app:
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/DSH Native.app"
+```
+
+This workaround is necessary only until releases are Developer ID signed and notarized. Never bypass quarantine for an artifact whose checksum does not match.
 
 ### Use DSH Native
 

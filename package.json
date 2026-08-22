@@ -1,6 +1,6 @@
 {
   "name": "dsh-native",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A focused desktop shell for HTTPS web apps, with saved servers and fast reconnects.",
   "main": "src/main.js",
   "desktopName": "dsh-native.desktop",
@@ -69,7 +69,9 @@
     },
     "mac": {
       "category": "public.app-category.utilities",
+      "hardenedRuntime": false,
       "icon": "build/icons/mac/icon.icns",
+      "identity": "-",
       "target": [
         "dmg",
         "zip"

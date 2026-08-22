@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-22
+
+### Fixed
+
+- Ad-hoc sign the Apple silicon macOS application before packaging so the bundle has a valid integrity signature.
+- Verify macOS signatures in the release workflow and document the remaining Gatekeeper behavior.
+
 ## [0.1.0] - 2026-08-22
 
 ### Added
@@ -19,5 +26,6 @@ All notable changes to this project are documented here. The format is based on 
 - Remote pages run with context isolation and without Node.js integration.
 - Privileged host-management IPC is limited to the bundled local server picker.
 
-[Unreleased]: https://github.com/leonardoxr/dsh-native/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/leonardoxr/dsh-native/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/leonardoxr/dsh-native/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/leonardoxr/dsh-native/releases/tag/v0.1.0

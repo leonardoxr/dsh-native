@@ -50,15 +50,15 @@ jobs:
           - os: windows-latest
             args: --win --x64
             artifact: windows-x64
-          - os: macos-14
-            args: --mac --x64
-            artifact: macos-x64
-          - os: macos-14
+            app_path: ""
+          - os: macos-15
             args: --mac --arm64
             artifact: macos-arm64
+            app_path: dist/mac-arm64/DSH Native.app
           - os: ubuntu-latest
             args: --linux --x64
             artifact: linux-x64
+            app_path: ""
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
 
@@ -79,6 +79,58 @@ jobs:
         run: npm run dist -- ${{ matrix.args }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Verify and smoke-test macOS artifacts
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          verify_signature() {
+            local app="$1"
+            codesign --verify --deep --strict --verbose=2 "$app"
+            local details
+            details=$(codesign -dv --verbose=4 "$app" 2>&1)
+            printf '%s\n' "$details"
+            grep -q "Signature=adhoc" <<<"$details"
+          }
+
+          verify_signature "${{ matrix.app_path }}"
+
+          work="$RUNNER_TEMP/dsh-native-${{ matrix.artifact }}-verify"
+          rm -rf "$work"
+          mkdir -p "$work/zip" "$work/dmg"
+          zip_files=(dist/*-mac-*.zip)
+          dmg_files=(dist/*-mac-*.dmg)
+          test "${#zip_files[@]}" -eq 1 && test -f "${zip_files[0]}"
+          test "${#dmg_files[@]}" -eq 1 && test -f "${dmg_files[0]}"
+
+          ditto -x -k "${zip_files[0]}" "$work/zip"
+          verify_signature "$work/zip/DSH Native.app"
+
+          cleanup_dmg() {
+            hdiutil detach "$work/dmg" >/dev/null 2>&1 || hdiutil detach -force "$work/dmg" >/dev/null 2>&1 || true
+          }
+          hdiutil attach "${dmg_files[0]}" -nobrowse -readonly -mountpoint "$work/dmg"
+          trap cleanup_dmg EXIT
+          verify_signature "$work/dmg/DSH Native.app"
+          cleanup_dmg
+          trap - EXIT
+
+          app_pid=""
+          cleanup_app() {
+            if [[ -n "$app_pid" ]] && kill -0 "$app_pid" 2>/dev/null; then
+              kill "$app_pid"
+              wait "$app_pid" 2>/dev/null || true
+            fi
+          }
+          trap cleanup_app EXIT
+          "$work/zip/DSH Native.app/Contents/MacOS/DSH Native" --user-data-dir="$work/profile" &
+          app_pid=$!
+          sleep 8
+          kill -0 "$app_pid"
+          cleanup_app
+          trap - EXIT
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v7
@@ -116,8 +168,6 @@ jobs:
           expected=(
             "DSH-Native-Setup-$version-win-x64.exe"
             "DSH-Native-Portable-$version-win-x64.exe"
-            "DSH-Native-$version-mac-x64.dmg"
-            "DSH-Native-$version-mac-x64.zip"
             "DSH-Native-$version-mac-arm64.dmg"
             "DSH-Native-$version-mac-arm64.zip"
             "DSH-Native-$version-linux-x86_64.AppImage"
