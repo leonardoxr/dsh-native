@@ -3,9 +3,13 @@
   "version": "0.1.0",
   "description": "A focused desktop shell for HTTPS web apps, with saved servers and fast reconnects.",
   "main": "src/main.js",
+  "desktopName": "dsh-native.desktop",
   "type": "commonjs",
   "private": true,
-  "author": "leonardoxr",
+  "author": {
+    "name": "leonardoxr",
+    "email": "leonardoxr@users.noreply.github.com"
+  },
   "license": "MIT",
   "homepage": "https://github.com/leonardoxr/dsh-native#readme",
   "repository": {
@@ -30,7 +34,7 @@
     "check": "node --check src/main.js && node --check src/preload.js && node --check src/renderer/app.js && node --check src/lib/normalize-url.js && node --check src/lib/navigation-policy.js",
     "test": "node --test",
     "package": "electron-builder --dir",
-    "dist": "electron-builder"
+    "dist": "electron-builder --publish never"
   },
   "build": {
     "appId": "dev.leonardoxr.dshnative",
@@ -74,6 +78,7 @@
     "linux": {
       "category": "Utility",
       "icon": "build/icons/png",
+      "syncDesktopName": true,
       "target": [
         "AppImage",
         "deb"

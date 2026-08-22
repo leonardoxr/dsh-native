@@ -38,7 +38,7 @@ A version tag builds these unsigned targets:
    git push origin vX.Y.Z
    ```
 
-The [Release workflow](../.github/workflows/release.yml) validates the version, builds each platform independently, computes checksums, and publishes a GitHub release with generated notes.
+The [Release workflow](../.github/workflows/release.yml) validates the version, builds each platform independently with electron-builder publishing disabled, verifies the complete artifact set, computes checksums, and publishes a GitHub release with generated notes.
 
 ## Verify publication
 
