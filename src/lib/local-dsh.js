@@ -5,6 +5,7 @@ const http = require('node:http')
 const https = require('node:https')
 
 const LOCAL_DSH_URL = 'http://127.0.0.1:3080/'
+const READY_TIMEOUT_MS = 30000
 
 function requestReady(url) {
   return new Promise((resolve, reject) => {
@@ -19,7 +20,7 @@ function requestReady(url) {
   })
 }
 
-async function waitForDsh(url, timeoutMs = 30000, child = null) {
+async function waitForDsh(url, timeoutMs = READY_TIMEOUT_MS, child = null) {
   const deadline = Date.now() + timeoutMs
   let processError = null
   const onError = (error) => { processError = error }
@@ -43,9 +44,18 @@ async function waitForDsh(url, timeoutMs = 30000, child = null) {
   throw new Error('Timed out waiting for dsh web on port 3080.')
 }
 
+function localDshCommand(platform = process.platform) {
+  return platform === 'win32' ? 'dsh.cmd' : 'dsh'
+}
+
+function localDshArgs() {
+  // --no-open keeps `dsh web` from also launching a system-browser tab
+  // alongside the DSH Native window.
+  return ['web', '--port', '3080', '--no-open']
+}
+
 function startLocalDsh({ onExit } = {}) {
-  const command = process.platform === 'win32' ? 'dsh.cmd' : 'dsh'
-  const child = spawn(command, ['web', '--port', '3080'], {
+  const child = spawn(localDshCommand(), localDshArgs(), {
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   })
@@ -63,4 +73,4 @@ function stopLocalDsh(child) {
   child.kill()
 }
 
-module.exports = { LOCAL_DSH_URL, startLocalDsh, stopLocalDsh, waitForDsh }
+module.exports = { LOCAL_DSH_URL, startLocalDsh, stopLocalDsh, waitForDsh, localDshCommand, localDshArgs }

@@ -2,14 +2,15 @@
 
 const { contextBridge, ipcRenderer } = require('electron')
 
-// The host-management bridge belongs only to the bundled server picker. Remote
-// pages run with context isolation and no access to these privileged IPC calls.
+// The Workspaces bridge belongs only to the bundled home screen. Remote pages
+// run with context isolation and never receive these privileged IPC calls.
 if (window.location.protocol === 'file:') {
   contextBridge.exposeInMainWorld('dshNative', {
-    startLocal: () => ipcRenderer.invoke('local:start'),
-    listHosts: () => ipcRenderer.invoke('hosts:list'),
     addHost: (name, url) => ipcRenderer.invoke('hosts:add', { name, url }),
     removeHost: (id) => ipcRenderer.invoke('hosts:remove', id),
-    connect: (id) => ipcRenderer.invoke('hosts:connect', id),
+    addTailnetServer: (dnsName, name) => ipcRenderer.invoke('tailnet:add-server', { dnsName, name }),
+    connect: (hostId) => ipcRenderer.invoke('home:connect', { hostId }),
+    getHomeSnapshot: () => ipcRenderer.invoke('home:snapshot'),
+    refreshHome: () => ipcRenderer.invoke('home:refresh'),
   })
 }

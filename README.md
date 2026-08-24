@@ -12,7 +12,8 @@ DSH Native keeps frequently used web apps out of ordinary browser tabs. The repo
 
 ## Highlights
 
-- **Saved server list** — add, name, remove, and switch between HTTPS endpoints.
+- **Saved server list** — add, name, remove, edit, and switch between HTTPS endpoints.
+- **Unified Workspace Home** — every saved server's workspaces and live sessions in one most-recent-first dashboard, with per-server badges, connection states, cached offline snapshots, and automatic discovery of DSH servers on your Tailscale network.
 - **Fast return** — reconnects to the most recently used server on launch and preconnects while the window starts.
 - **Focused window** — external links open in the system browser instead of spawning extra app windows.
 - **Responsive in the background** — renderer and timer throttling are disabled so long-running apps remain live.
@@ -49,8 +50,16 @@ This workaround is necessary only until releases are Developer ID signed and not
 
 1. Launch DSH Native.
 2. Choose **Start local DSH Web (port 3080)** to run the existing `dsh` CLI installation, or add a display name and an `https://` URL.
-3. Select the server to connect.
-4. Use **App → Servers…** or <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>H</kbd> to return to the server list.
+3. Select the server to connect. Launch reconnects to your most recently used server automatically.
+4. Open **App → Workspaces…** (<kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>H</kbd>) from any connected server to reach the aggregated dashboard.
+
+### Workspace Home
+
+The bundled home screen aggregates workspaces and live sessions from **every saved server plus the managed local instance** into one combined, most-recent-first list. Each card shows the workspace title, path, server name, server URL badge, last-updated time, session count, and that server's connection state (`loading`, `online`, or `unavailable` — including distinct *Not authorized*, *No Companion*, and *Offline (tailnet)* states). One offline server never blocks the rest of the dashboard.
+
+The dashboard paints instantly from each server's last successful snapshot (stored locally in `userData/workspace-cache.json`) and then quietly revalidates on open, on focus, every 60 seconds while visible, and via the explicit **Refresh** action. Cached rows are dimmed and age-labeled until fresh data arrives; stale snapshots are never presented as current, and removing a server deletes its cache.
+
+The **Servers** area at the bottom of the dashboard manages Local, Saved, and discovered machines: start or open the managed local instance, add/rename/remove saved servers, and confirm suggestions under **Found on your Tailnet**. When Tailscale is installed locally, DSH Native lists tailnet peers that answer the Companion endpoint and offers them as one-click additions saved as stable MagicDNS HTTPS URLs (`https://machine.tailnet.ts.net/`). Nothing is saved without confirmation.
 
 The local option runs `dsh web --port 3080`, waits for it to become ready, and stops the process when DSH Native exits. It requires the `dsh` command to be available on `PATH`; port 3080 must be free.
 
@@ -64,7 +73,9 @@ The iOS source compiles and its simulator suite runs on the project's local Appl
 
 ## DeepSeek Harness companion
 
-When the remote app is a DeepSeek Harness web UI, install [dsh-companion](https://github.com/leonardoxr/dsh-companion), an out-of-tree Harness plugin. It exposes lightweight project/session endpoints and a filtered notification event feed. DSH Native connects to that feed directly from its main process—remote page content never receives a privileged desktop-notification API.
+When the remote app is a DeepSeek Harness web UI, install [dsh-companion](https://github.com/leonardoxr/dsh-companion), an out-of-tree Harness plugin. It exposes lightweight project/session endpoints and a filtered notification event feed. DSH Native connects to those endpoints directly from its main process—remote page content never receives privileged IPC or Companion access. Companion is strictly **read-only**: it lists workspaces, sessions, and events, and cannot create or switch workspaces remotely, so selecting a card in Workspace Home opens the owning server in the normal DSH Web UI rather than navigating to a specific workspace.
+
+The same data feeds the Workspace Home dashboard. Remote servers must present an authority the server trusts: reach them over their MagicDNS name (or any host) and run `dsh web --trusted-host <that-host>` once, otherwise Companion reads return HTTP 403 and the dashboard shows the *Not authorized* state with this hint.
 
 Notifications are shown only while DSH Native is running and its window is not focused. Clicking one restores and focuses the app. Reconnect cursors and stable event keys prevent duplicate alerts during ordinary network interruptions. Choose which turn outcomes, questions, approvals, and subagent events are forwarded in the companion plugin's Harness settings. Closing the app window stops the feed; on Windows and Linux it also exits DSH Native. Keep the window open or minimized to continue receiving alerts.
 
@@ -106,9 +117,10 @@ Create an unpacked app for the current platform with `npm run package`, or distr
 ```text
 src/
 ├── main.js                 Electron main process and server management
-├── preload.js              Context-isolated bridge for the local picker
-├── lib/                    URL policy, local DSH launcher, SSE feed, deduplication, and notification presentation
-└── renderer/               Bundled server-picker HTML, CSS, and JavaScript
+├── preload.js              Context-isolated bridge for the bundled Workspaces home
+├── lib/                    URL policy, local DSH launcher, Companion client and aggregator,
+│                            Tailscale status parsing, presentation mapping, SSE feed, notifications
+└── renderer/               Bundled Workspace Home dashboard HTML, CSS, and JavaScript
 test/                       Node.js unit tests
 ios/                        Native SwiftUI iPhone/iPad app and tests
 scripts/                    Reusable local and remote build helpers

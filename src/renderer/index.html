@@ -2,25 +2,50 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Servers</title>
+  <title>Workspaces</title>
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main>
-    <h1>Servers</h1>
-    <p class="hint">Start a local DSH Web server or connect to an HTTPS server.</p>
+    <header class="topbar">
+      <h1>Workspaces</h1>
+      <button id="refresh" type="button" title="Refresh workspaces (reaches every saved server)">Refresh</button>
+    </header>
+    <p id="banner" class="banner" hidden></p>
 
-    <button id="start-local" type="button">Start local DSH Web (port 3080)</button>
+    <section id="workspace-section" aria-label="Workspaces">
+      <ul id="workspace-list" class="cards"></ul>
+      <p id="empty-state" class="hint" hidden>Nothing here yet. Connect a server, add one below, or start local DSH Web.</p>
+    </section>
 
-    <form id="add-form">
-      <input id="name" type="text" placeholder="Name (optional)" autocomplete="off" />
-      <input id="url" type="url" placeholder="https://host:port" required />
-      <button type="submit">Add</button>
-    </form>
-    <p id="error" class="error" hidden></p>
+    <section id="live-sessions-section" hidden>
+      <h2>Live sessions</h2>
+      <ul id="live-session-list" class="rows"></ul>
+    </section>
 
-    <ul id="host-list"></ul>
+    <section id="servers-section">
+      <h2>Servers</h2>
+      <div class="server-group">
+        <h3>Local</h3>
+        <div id="server-local" class="server-row"></div>
+      </div>
+      <div class="server-group">
+        <h3>Saved</h3>
+        <ul id="server-list" class="rows"></ul>
+        <p id="no-servers" class="hint" hidden>No saved servers yet. Add an https:// server below.</p>
+      </div>
+      <div class="server-group" id="tailnet-group" hidden>
+        <h3>Found on your Tailnet</h3>
+        <ul id="tailnet-list" class="rows"></ul>
+      </div>
+      <form id="add-form">
+        <input id="name" type="text" placeholder="Name (optional)" autocomplete="off" />
+        <input id="url" type="url" placeholder="https://host" required />
+        <button type="submit">Add</button>
+      </form>
+      <p id="error" class="error" hidden></p>
+    </section>
   </main>
   <script src="app.js"></script>
 </body>

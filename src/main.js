@@ -11,6 +11,10 @@ const { LOCAL_DSH_URL, startLocalDsh, stopLocalDsh, waitForDsh } = require('./li
 const { classifyNavigation } = require('./lib/navigation-policy')
 const { NotificationFeed } = require('./lib/notification-feed')
 const { createNotificationPresenter } = require('./lib/notification-presenter')
+const { assertHomeSender } = require('./lib/home-sender')
+const { fetchCompanionServerData, probeCandidates, isConnectivityFailure } = require('./lib/companion-client')
+const { aggregateServers } = require('./lib/workspace-aggregator')
+const { readTailscaleStatus, findPeerForHost, magicDnsHttpsUrl } = require('./lib/tailscale')
 
 // Keep rendering and timers at full rate even when the window is occluded or
 // minimized: the app must stay live and snap back instantly. Switches must be
@@ -18,11 +22,11 @@ const { createNotificationPresenter } = require('./lib/notification-presenter')
 
 // Perf diagnostics land in userData so they survive GUI stdout detachment on Windows.
 function perfLog(message) {
-  const line = `[perf] ${message}`
+  const line = '[perf] ' + message
   console.log(line)
   try {
     fs.mkdirSync(app.getPath('userData'), { recursive: true })
-    fs.appendFileSync(path.join(app.getPath('userData'), 'perf.log'), `${new Date().toISOString()} ${line}\n`)
+    fs.appendFileSync(path.join(app.getPath('userData'), 'perf.log'), new Date().toISOString() + ' ' + line + '\n')
   } catch {
     // userData may not exist yet during very early boot; console output still has it.
   }
@@ -61,19 +65,82 @@ function saveHosts(hosts) {
   fs.writeFileSync(hostsFile(), JSON.stringify(hosts, null, 2))
 }
 
-const pickerUrl = pathToFileURL(path.join(__dirname, 'renderer', 'index.html')).href
+// --- Workspaces dashboard state ---------------------------------------------
+
+const LOCAL_HOST_ID = 'local'
+const WORKSPACE_CACHE_FILE = () => path.join(app.getPath('userData'), 'workspace-cache.json')
+const WORKSPACE_CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000
+const TAILNET_MEMO_MS = 15000
+const TAILNET_SUGGESTION_LIMIT = 24
+const REFRESH_TIMEOUT_MS = 5000
+const LOCAL_REFRESH_START_TIMEOUT_MS = 8000
+const LOCAL_CONNECT_TIMEOUT_MS = 30000
+
+let workspaceCache = null
+let tailnetMemo = null
+let lastTailnetSuggestions = { available: false, peers: [] }
+let refreshPromise = null
+
+function localHostEntry() {
+  return { id: LOCAL_HOST_ID, name: 'This computer', url: LOCAL_DSH_URL, lastUsedAt: 0, local: true }
+}
+
+function sanitizeCacheEntry(entry) {
+  if (!entry || typeof entry !== 'object') return null
+  if (typeof entry.fetchedAt !== 'number' || !Number.isFinite(entry.fetchedAt)) return null
+  if (Date.now() - entry.fetchedAt > WORKSPACE_CACHE_MAX_AGE_MS) return null
+  if (!Array.isArray(entry.workspaces)) return null
+  return {
+    fetchedAt: entry.fetchedAt,
+    workspaces: entry.workspaces,
+    sessions: Array.isArray(entry.sessions) ? entry.sessions : null,
+  }
+}
+
+/** Last successful Companion snapshot per server, painted before any network. */
+function getWorkspaceCache() {
+  if (workspaceCache instanceof Map) return workspaceCache
+  workspaceCache = new Map()
+  try {
+    const raw = JSON.parse(fs.readFileSync(WORKSPACE_CACHE_FILE(), 'utf8'))
+    if (raw && typeof raw === 'object') {
+      for (const [id, entry] of Object.entries(raw)) {
+        const clean = sanitizeCacheEntry(entry)
+        if (clean) workspaceCache.set(id, clean)
+      }
+    }
+  } catch {
+    // Missing or unreadable file simply means an empty dashboard on first paint.
+  }
+  return workspaceCache
+}
+
+function saveWorkspaceCache() {
+  try {
+    fs.mkdirSync(path.dirname(WORKSPACE_CACHE_FILE()), { recursive: true })
+    fs.writeFileSync(WORKSPACE_CACHE_FILE(), JSON.stringify(Object.fromEntries(getWorkspaceCache())))
+  } catch (error) {
+    perfLog('workspace cache write failed: ' + error.message)
+  }
+}
+
+const homeUrl = pathToFileURL(path.join(__dirname, 'renderer', 'index.html')).href
 const trustedOrigins = new WeakMap()
 
-let mainWindow = null
-let notificationFeed = null
-let localDshProcess = null
+let mainWindow = null;
+let notificationFeed = null;
+let localDshProcess = null;
 
 const presentNotification = createNotificationPresenter({
   Notification,
   getWindow: () => mainWindow,
 })
 
-function loadPicker(win) {
+function requireHome(event) {
+  assertHomeSender(event.senderFrame?.url, homeUrl)
+}
+
+function loadHome(win) {
   notificationFeed?.stop()
   trustedOrigins.delete(win)
   void win.loadFile(path.join(__dirname, 'renderer', 'index.html'))
@@ -86,12 +153,9 @@ function loadLocalHost(win) {
   void win.loadURL(LOCAL_DSH_URL)
 }
 
-async function startLocalDshWeb(win) {
-  if (localDshProcess && localDshProcess.exitCode === null) {
-    loadLocalHost(win)
-    return
-  }
-
+/** Spawn dsh web if needed and wait for readiness; never navigates. */
+function ensureLocalDshRunning(timeoutMs = LOCAL_CONNECT_TIMEOUT_MS) {
+  if (localDshProcess && localDshProcess.exitCode === null) return Promise.resolve()
   let child
   child = startLocalDsh({
     onExit: (code, signal, output, error) => {
@@ -101,14 +165,16 @@ async function startLocalDshWeb(win) {
     },
   })
   localDshProcess = child
-  try {
-    await waitForDsh(LOCAL_DSH_URL, 30000, child)
-    loadLocalHost(win)
-  } catch (error) {
+  return waitForDsh(LOCAL_DSH_URL, timeoutMs, child).catch((error) => {
     stopLocalDsh(child)
     if (localDshProcess === child) localDshProcess = null
     throw new Error(error.message + ' Make sure the existing dsh command is installed and port 3080 is available.')
-  }
+  })
+}
+
+async function startLocalDshWeb(win) {
+  await ensureLocalDshRunning(LOCAL_CONNECT_TIMEOUT_MS)
+  loadLocalHost(win)
 }
 
 function loadHost(win, targetUrl) {
@@ -148,7 +214,7 @@ function createWindow(targetUrl) {
     },
   })
 
-  // Keep remote content on the selected HTTPS origin. Cross-origin destinations
+  // Keep remote content on the selected server origin. Cross-origin destinations
   // open in the system browser, where the address and certificate are visible.
   win.webContents.on('will-navigate', (event, url) => guardNavigation(win, event, url))
   win.webContents.on('will-redirect', (event, url) => guardNavigation(win, event, url))
@@ -160,13 +226,13 @@ function createWindow(targetUrl) {
 
   win.once('ready-to-show', () => {
     win.show()
-    perfLog(`first paint ready in ${(performance.now() - bootStart).toFixed(0)}ms`)
+    perfLog('first paint ready in ' + (performance.now() - bootStart).toFixed(0) + 'ms')
   })
 
-  if (!targetUrl || !loadHost(win, targetUrl)) loadPicker(win)
+  if (!targetUrl || !loadHost(win, targetUrl)) loadHome(win)
 
   win.webContents.once('did-finish-load', () => {
-    perfLog(`page loaded in ${(performance.now() - bootStart).toFixed(0)}ms`)
+    perfLog('page loaded in ' + (performance.now() - bootStart).toFixed(0) + 'ms')
   })
   win.once('closed', () => {
     notificationFeed?.stop()
@@ -177,7 +243,7 @@ function createWindow(targetUrl) {
 
 function showHome() {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    loadPicker(mainWindow)
+    loadHome(mainWindow)
   } else {
     mainWindow = createWindow(null)
   }
@@ -195,13 +261,13 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) showHome()
   })
-  perfLog(`gpu: ${JSON.stringify(app.getGPUFeatureStatus())}`)
+  perfLog('gpu: ' + JSON.stringify(app.getGPUFeatureStatus()))
   // The feature status can be stale before the GPU process initializes.
   app.on('gpu-info-update', () => {
-    perfLog(`gpu update: ${JSON.stringify(app.getGPUFeatureStatus())}`)
+    perfLog('gpu update: ' + JSON.stringify(app.getGPUFeatureStatus()))
   })
   setTimeout(() => {
-    perfLog(`gpu settled: ${JSON.stringify(app.getGPUFeatureStatus())}`)
+    perfLog('gpu settled: ' + JSON.stringify(app.getGPUFeatureStatus()))
   }, 5000)
 })
 
@@ -214,72 +280,252 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-// --- IPC: host list management -------------------------------------------
+// --- Companion aggregation ---------------------------------------------------
 
-function requirePicker(event) {
-  if (event.senderFrame.url !== pickerUrl) {
-    throw new Error('Host management is available only from the local server picker.')
+/** Memoized `tailscale status --json`; null means no usable local tailnet. */
+async function getTailnetStatus() {
+  if (tailnetMemo && Date.now() - tailnetMemo.at < TAILNET_MEMO_MS) return tailnetMemo.value
+  const { status, diagnostic } = await readTailscaleStatus()
+  if (!status) {
+    if (diagnostic && diagnostic !== 'not-installed') perfLog('tailscale unavailable: ' + diagnostic)
+    tailnetMemo = { at: Date.now(), value: null }
+    return null
   }
+  tailnetMemo = { at: Date.now(), value: status }
+  return status
 }
 
-ipcMain.handle('local:start', async (event) => {
-  requirePicker(event)
-  const win = BrowserWindow.fromWebContents(event.sender)
-  if (!win) throw new Error('The native window is unavailable.')
-  await startLocalDshWeb(win)
-})
+async function fetchLocalServerData(fetchImpl) {
+  try {
+    await ensureLocalDshRunning(LOCAL_REFRESH_START_TIMEOUT_MS)
+  } catch (error) {
+    return { ok: false, fetchedAt: Date.now(), failure: { reason: 'local-start', message: error.message } }
+  }
+  const result = await fetchCompanionServerData(LOCAL_DSH_URL, { fetchImpl, timeoutMs: REFRESH_TIMEOUT_MS })
+  return { ...result, fetchedAt: Date.now() }
+}
 
-ipcMain.handle('hosts:list', (event) => {
-  requirePicker(event)
-  return getHosts()
-})
+async function fetchRemoteServerData(host, fetchImpl, peers) {
+  const result = await fetchCompanionServerData(host.url, { fetchImpl, timeoutMs: REFRESH_TIMEOUT_MS })
+  if (!result.ok && isConnectivityFailure(result.failure)) {
+    // A peer Tailscale itself reports offline gets a precise label instead of a generic timeout.
+    const peer = findPeerForHost(peers, host.url)
+    if (peer && !peer.online) {
+      return { ok: false, fetchedAt: Date.now(), failure: { reason: 'offline-peer', message: 'This device is currently offline on your tailnet.' } }
+    }
+  }
+  return { ...result, fetchedAt: Date.now() }
+}
 
-ipcMain.handle('hosts:add', (event, { name, url }) => {
-  requirePicker(event)
-  const normalized = normalizeUrl(url)
-  if (!normalized) throw new Error('Only valid https:// URLs are supported.')
-  const hosts = getHosts()
-  const existing = hosts.find((h) => h.url === normalized)
+/** Probe responsive tailnet peers; only these become suggestions. */
+async function refreshTailnetSuggestions(tailnetStatus, fetchImpl) {
+  if (!tailnetStatus?.available) return { available: false, peers: [] }
+  const savedHostnames = new Set(
+    getHosts()
+      .map((host) => {
+        try { return new URL(host.url).hostname.toLowerCase() } catch { return '' }
+      })
+      .filter(Boolean),
+  )
+  const candidates = tailnetStatus.peers
+    .filter((peer) => peer.dnsName && !savedHostnames.has(peer.dnsName.toLowerCase()))
+    .slice(0, TAILNET_SUGGESTION_LIMIT)
+  const probes = await probeCandidates(
+    candidates.map((peer) => 'https://' + peer.dnsName.toLowerCase() + '/'),
+    { fetchImpl, timeoutMs: 3500, concurrency: 4 },
+  )
+  const peers = candidates
+    .map((peer, index) => ({
+      dnsName: peer.dnsName,
+      hostName: peer.hostName ?? peer.dnsName.split('.')[0],
+      online: peer.online === true,
+      probe: probes[index],
+    }))
+    .filter((peer) => peer.probe !== 'unreachable')
+  return { available: true, peers }
+}
+
+function rememberServerResults(entries) {
+  const cache = getWorkspaceCache()
+  let changed = false
+  for (const { host, result } of entries) {
+    if (result.ok !== true) continue
+    cache.set(host.id, {
+      fetchedAt: result.fetchedAt,
+      workspaces: result.workspaces ?? [],
+      sessions: result.sessions,
+    })
+    changed = true
+  }
+  if (changed) saveWorkspaceCache()
+}
+
+/**
+ * Assemble the renderer snapshot. Rows from servers whose live read failed are
+ * still included from the last-good cache but flagged stale so the UI can dim
+ * and age-label them; cached data never masquerades as current.
+ */
+function buildSnapshot(entries, tailnet, statusOverrides = {}) {
+  const cache = getWorkspaceCache()
+  const aggregationEntries = [];
+  const servers = {};
+  for (const { host, result } of entries) {
+    const ok = result?.ok === true;
+    const cached = ok ? null : sanitizeCacheEntry(cache.get(host.id));
+    const rowsSource = ok
+      ? { workspaces: result.workspaces ?? [], sessions: result.sessions ?? null }
+      : cached;
+    aggregationEntries.push({ host, result: { ok: true, workspaces: rowsSource?.workspaces ?? [], sessions: rowsSource?.sessions ?? null } });
+    const failure = ok ? null : {
+      reason: result.failure?.reason ?? 'network',
+      message: typeof result.failure?.message === 'string' ? result.failure.message.slice(0, 300) : '',
+      httpStatus: result.failure?.httpStatus ?? null,
+    };
+    servers[host.id] = {
+      id: host.id,
+      name: host.name,
+      url: host.url,
+      local: host.local === true,
+      lastUsedAt: host.lastUsedAt ?? 0,
+      status: statusOverrides[host.id] ?? (ok ? 'online' : 'unavailable'),
+      fetchedAt: ok ? result.fetchedAt : (cached?.fetchedAt ?? null),
+      failure,
+      workspaceCount: rowsSource?.workspaces.length ?? 0,
+    };
+  }
+  const aggregated = aggregateServers(aggregationEntries);
+  const staleHostIds = new Set(Object.values(servers).filter((s) => s.status === 'unavailable').map((s) => s.id));
+  const markStale = (row) => (staleHostIds.has(row.hostId) ? { ...row, stale: true } : row);
+  return {
+    generatedAt: Date.now(),
+    servers,
+    tailnet,
+    rows: aggregated.workspaceRows.map(markStale),
+    orphanSessions: aggregated.orphanSessions.map(markStale),
+  };
+}
+
+function cacheEntryToResult(entry) {
+  const clean = sanitizeCacheEntry(entry);
+  if (!clean) return { ok: false, fetchedAt: Date.now(), failure: { reason: 'loading', message: '' } }
+  return { ok: true, workspaces: clean.workspaces, sessions: clean.sessions, fetchedAt: clean.fetchedAt }
+}
+
+/** Instant pre-network snapshot from persisted caches; statuses stay honest. */
+function buildCachedSnapshot() {
+  const cache = getWorkspaceCache();
+  const entries = [
+    { host: localHostEntry(), result: cacheEntryToResult(cache.get(LOCAL_HOST_ID)) },
+    ...getHosts().map((host) => ({ host, result: cacheEntryToResult(cache.get(host.id)) })),
+  ];
+  const overrides = {};
+  for (const entry of entries) overrides[entry.host.id] = entry.result.ok ? 'cache' : 'loading';
+  return buildSnapshot(entries, lastTailnetSuggestions, overrides);
+}
+
+async function performHomeRefresh(fetchImpl) {
+  const hosts = getHosts();
+  const tailnetStatus = await getTailnetStatus();
+  const [localResult, remoteResults, tailnet] = await Promise.all([
+    fetchLocalServerData(fetchImpl),
+    Promise.all(hosts.map((host) => fetchRemoteServerData(host, fetchImpl, tailnetStatus?.peers ?? []))),
+    refreshTailnetSuggestions(tailnetStatus, fetchImpl),
+  ]);
+  const entries = [
+    { host: localHostEntry(), result: localResult },
+    ...hosts.map((host, index) => ({ host, result: remoteResults[index] })),
+  ];
+  rememberServerResults(entries);
+  lastTailnetSuggestions = tailnet;
+  return buildSnapshot(entries, tailnet);
+}
+
+function queueRefresh(webContents) {
+  if (refreshPromise) return refreshPromise;
+  const session = webContents.session;
+  refreshPromise = performHomeRefresh(session.fetch.bind(session))
+    .finally(() => { refreshPromise = null; })
+  return refreshPromise;
+}
+
+// --- IPC: Workspaces dashboard -----------------------------------------------
+
+ipcMain.handle('home:snapshot', (event) => {
+  requireHome(event)
+  return buildCachedSnapshot();
+});
+
+ipcMain.handle('home:refresh', (event) => {
+  requireHome(event);
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) throw new Error('The native window is unavailable.');
+  return queueRefresh(win.webContents);
+});
+
+ipcMain.handle('home:connect', async (event, { hostId } = {}) => {
+  requireHome(event);
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) throw new Error('The native window is unavailable.');
+  if (hostId === LOCAL_HOST_ID) {
+    await startLocalDshWeb(win);
+    return;
+  }
+  const host = getHosts().find((h) => h.id === hostId);
+  if (!host) throw new Error('Unknown server.');
+  host.lastUsedAt = Date.now();
+  saveHosts([host, ...getHosts().filter((h) => h.id !== host.id)]);
+  if (!loadHost(win, host.url)) throw new Error('The saved server URL is invalid.');
+});
+
+// --- IPC: server management ----------------------------------------------------
+
+function addHostCore(name, urlInput) {
+  const normalized = normalizeUrl(urlInput);
+  if (!normalized) throw new Error('Only valid https:// URLs are supported.');
+  const hosts = getHosts();
+  const existing = hosts.find((h) => h.url === normalized);
   if (existing) {
-    existing.name = name || existing.name
-    saveHosts(hosts)
-    return existing
+    existing.name = name || existing.name;
+    saveHosts(hosts);
+    return existing;
   }
   const host = {
     id: crypto.randomUUID(),
     name: name || new URL(normalized).host,
     url: normalized,
     lastUsedAt: 0,
-  }
-  hosts.push(host)
-  saveHosts(hosts)
-  return host
-})
+  };
+  hosts.push(host);
+  saveHosts(hosts);
+  return host;
+}
+
+ipcMain.handle('hosts:add', (event, { name, url } = {}) => {
+  requireHome(event);
+  return addHostCore(typeof name === 'string' ? name : '', url);
+});
 
 ipcMain.handle('hosts:remove', (event, id) => {
-  requirePicker(event)
-  saveHosts(getHosts().filter((h) => h.id !== id))
-})
+  requireHome(event);
+  saveHosts(getHosts().filter((h) => h.id !== id));
+  getWorkspaceCache().delete(String(id));
+  saveWorkspaceCache();
+});
 
-ipcMain.handle('hosts:connect', (event, id) => {
-  requirePicker(event)
-  const host = getHosts().find((h) => h.id === id)
-  if (!host) throw new Error('Unknown server.')
-  host.lastUsedAt = Date.now()
-  saveHosts([host, ...getHosts().filter((h) => h.id !== host.id)])
+ipcMain.handle('tailnet:add-server', (event, { dnsName, name } = {}) => {
+  requireHome(event);
+  const url = magicDnsHttpsUrl(dnsName);
+  if (!url) throw new Error('That MagicDNS name is not valid.');
+  return addHostCore(typeof name === 'string' ? name : '', url);
+});
 
-  const win = BrowserWindow.fromWebContents(event.sender)
-  if (!win || !loadHost(win, host.url)) throw new Error('The saved server URL is invalid.')
-})
-
-
-// Minimal menu so users can always get back to the server list.
+// Minimal menu so users can always get back to the aggregated dashboard.
 Menu.setApplicationMenu(
   Menu.buildFromTemplate([
     {
       label: 'App',
       submenu: [
-        { label: 'Servers…', accelerator: 'CmdOrCtrl+H', click: () => showHome() },
+        { label: 'Workspaces…', accelerator: 'CmdOrCtrl+H', click: () => showHome() },
         { type: 'separator' },
         process.platform === 'darwin'
           ? { role: 'quit' }
@@ -290,5 +536,4 @@ Menu.setApplicationMenu(
     { role: 'viewMenu' },
   ]),
 )
-
 
