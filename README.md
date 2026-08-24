@@ -16,7 +16,7 @@ DSH Native keeps frequently used web apps out of ordinary browser tabs. The repo
 - **Unified Workspace Home** — every saved server's workspaces and live sessions in one most-recent-first dashboard, with per-server badges, connection states, cached offline snapshots, and automatic discovery of DSH servers on your Tailscale network.
 - **Fast return** — reconnects to the most recently used server on launch and preconnects while the window starts.
 - **Focused window** — external links open in the system browser instead of spawning extra app windows.
-- **Responsive in the background** — renderer and timer throttling are disabled so long-running apps remain live.
+- **Battery-aware background behavior** — hidden pages use Chromium throttling, dashboard polling pauses off-screen, and the native notification feed remains live in the main process.
 - **Native attention alerts** — companion events become deduplicated OS notifications for completed, blocked, failed, question, and approval states.
 - **Hardened boundary** — remote pages receive no native host-management capability, and cross-origin navigation opens in the system browser.
 - **Native mobile companion** — a polished SwiftUI and WebKit implementation supports iPhone and iPad without Electron or third-party runtime dependencies.

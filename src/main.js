@@ -15,31 +15,59 @@ const { assertHomeSender } = require('./lib/home-sender')
 const { fetchCompanionServerData, probeCandidates, isConnectivityFailure } = require('./lib/companion-client')
 const { aggregateServers } = require('./lib/workspace-aggregator')
 const { readTailscaleStatus, findPeerForHost, magicDnsHttpsUrl } = require('./lib/tailscale')
+const { createTailnetSuggestionTracker } = require('./lib/tailnet-suggestions')
 const { createUpdater } = require('./lib/updater')
 const { isAllowedChannel } = require('./lib/update-channels')
 
-// Keep rendering and timers at full rate even when the window is occluded or
-// minimized: the app must stay live and snap back instantly. Switches must be
-// appended before app ready.
+// Let Chromium throttle hidden/occluded pages so the macOS app stays quiet
+// on battery. The native notification feed lives in the main process and does
+// not depend on renderer timers, while the bundled home pauses its own polls
+// when hidden.
 
 // Perf diagnostics land in userData so they survive GUI stdout detachment on Windows.
+let perfLogQueue = []
+let perfLogTimer = null
+let perfLogWrite = Promise.resolve()
+
+function flushPerfLog() {
+  perfLogTimer = null
+  if (perfLogQueue.length === 0) return
+  const batch = perfLogQueue.join('')
+  perfLogQueue = []
+  perfLogWrite = perfLogWrite.then(async () => {
+    try {
+      const file = path.join(app.getPath('userData'), 'perf.log')
+      await fs.promises.mkdir(path.dirname(file), { recursive: true })
+      await fs.promises.appendFile(file, batch)
+    } catch {
+      // userData may not exist yet during very early boot; console output still has it.
+    }
+  })
+}
+
 function perfLog(message) {
   const line = '[perf] ' + message
   console.log(line)
-  try {
-    fs.mkdirSync(app.getPath('userData'), { recursive: true })
-    fs.appendFileSync(path.join(app.getPath('userData'), 'perf.log'), new Date().toISOString() + ' ' + line + '\n')
-  } catch {
-    // userData may not exist yet during very early boot; console output still has it.
+  perfLogQueue.push(new Date().toISOString() + ' ' + line + '\n')
+  if (perfLogTimer === null) {
+    perfLogTimer = setTimeout(flushPerfLog, 1000)
+    perfLogTimer.unref?.()
   }
 }
 
-for (const flag of [
-  'disable-renderer-backgrounding',
-  'disable-background-timer-throttling',
-  'disable-backgrounding-occluded-windows',
-]) {
-  app.commandLine.appendSwitch(flag)
+function flushPerfLogSync() {
+  if (perfLogTimer !== null) clearTimeout(perfLogTimer)
+  perfLogTimer = null
+  if (perfLogQueue.length === 0) return
+  const batch = perfLogQueue.join('')
+  perfLogQueue = []
+  try {
+    const file = path.join(app.getPath('userData'), 'perf.log')
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.appendFileSync(file, batch)
+  } catch {
+    // Shutdown diagnostics are best-effort.
+  }
 }
 
 if (process.platform === 'win32') app.setAppUserModelId('dev.leonardoxr.dshnative')
@@ -95,16 +123,33 @@ function saveHosts(hosts) {
 const LOCAL_HOST_ID = 'local'
 const WORKSPACE_CACHE_FILE = () => path.join(app.getPath('userData'), 'workspace-cache.json')
 const WORKSPACE_CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000
-const TAILNET_MEMO_MS = 15000
+// Tailscale status is useful for labels, not a per-refresh heartbeat.
+const TAILNET_MEMO_MS = 60_000
 const TAILNET_SUGGESTION_LIMIT = 24
+const TAILNET_SUGGESTION_TTL_MS = 5 * 60 * 1000
 const REFRESH_TIMEOUT_MS = 5000
 const LOCAL_REFRESH_START_TIMEOUT_MS = 8000
 const LOCAL_CONNECT_TIMEOUT_MS = 30000
+const LOCAL_START_RETRY_COOLDOWN_MS = 5 * 60 * 1000
+
+const tailnetSuggestionTracker = createTailnetSuggestionTracker({
+  suggestionLimit: TAILNET_SUGGESTION_LIMIT,
+  ttlMs: TAILNET_SUGGESTION_TTL_MS,
+})
 
 let workspaceCache = null
 let tailnetMemo = null
 let lastTailnetSuggestions = { available: false, peers: [] }
 let refreshPromise = null
+
+const WORKSPACE_SAVE_DEBOUNCE_MS = 1000
+const WORKSPACE_CACHE_TOUCH_MS = 5 * 60 * 1000
+let workspaceSaveTimer = null
+let lastWrittenWorkspaceJson = null
+let workspaceSaveWrite = Promise.resolve()
+let workspaceSaveInFlight = false
+/** Per-host [workspaces, sessions] signature; fetchedAt is excluded on purpose. */
+const workspaceSignatures = new Map()
 
 function localHostEntry() {
   return { id: LOCAL_HOST_ID, name: 'This computer', url: LOCAL_DSH_URL, lastUsedAt: 0, local: true }
@@ -127,11 +172,18 @@ function getWorkspaceCache() {
   if (workspaceCache instanceof Map) return workspaceCache
   workspaceCache = new Map()
   try {
-    const raw = JSON.parse(fs.readFileSync(WORKSPACE_CACHE_FILE(), 'utf8'))
-    if (raw && typeof raw === 'object') {
-      for (const [id, entry] of Object.entries(raw)) {
+    const raw = fs.readFileSync(WORKSPACE_CACHE_FILE(), 'utf8')
+    // Treat the file on disk as already persisted so an unchanged first
+    // refresh does not rewrite it.
+    lastWrittenWorkspaceJson = raw
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed === 'object') {
+      for (const [id, entry] of Object.entries(parsed)) {
         const clean = sanitizeCacheEntry(entry)
-        if (clean) workspaceCache.set(id, clean)
+        if (clean) {
+          workspaceCache.set(id, clean)
+          workspaceSignatures.set(id, JSON.stringify([clean.workspaces, clean.sessions]))
+        }
       }
     }
   } catch {
@@ -140,12 +192,52 @@ function getWorkspaceCache() {
   return workspaceCache
 }
 
+/** Serialize the in-memory cache; identical output short-circuits writes. */
+function serializeWorkspaceCache() {
+  return JSON.stringify(Object.fromEntries(getWorkspaceCache()))
+}
+
+/**
+ * Coalesce repeated snapshots into one background write off the main-process
+ * hot path. No-op when the serialized cache matches what is already on disk.
+ */
 function saveWorkspaceCache() {
+  const json = serializeWorkspaceCache()
+  if (json === lastWrittenWorkspaceJson) return
+  if (workspaceSaveTimer !== null) clearTimeout(workspaceSaveTimer)
+  workspaceSaveTimer = setTimeout(() => {
+    workspaceSaveTimer = null
+    workspaceSaveWrite = workspaceSaveWrite.then(async () => {
+      workspaceSaveInFlight = true
+      try {
+        await fs.promises.mkdir(path.dirname(WORKSPACE_CACHE_FILE()), { recursive: true })
+        await fs.promises.writeFile(WORKSPACE_CACHE_FILE(), json)
+        lastWrittenWorkspaceJson = json
+      } catch (error) {
+        perfLog('workspace cache write failed: ' + error.message)
+      } finally {
+        workspaceSaveInFlight = false
+      }
+    })
+  }, WORKSPACE_SAVE_DEBOUNCE_MS)
+  workspaceSaveTimer.unref?.()
+}
+
+/** Synchronous final write for quit/install paths; runs only when dirty. */
+function flushWorkspaceCacheSync() {
+  // An async write already in flight owns ordering; let it finish rather than
+  // racing it with a synchronous write that could put an older snapshot last.
+  if (workspaceSaveInFlight) return
+  if (workspaceSaveTimer !== null) clearTimeout(workspaceSaveTimer)
+  workspaceSaveTimer = null
+  const json = serializeWorkspaceCache()
+  if (json === lastWrittenWorkspaceJson) return
   try {
     fs.mkdirSync(path.dirname(WORKSPACE_CACHE_FILE()), { recursive: true })
-    fs.writeFileSync(WORKSPACE_CACHE_FILE(), JSON.stringify(Object.fromEntries(getWorkspaceCache())))
+    fs.writeFileSync(WORKSPACE_CACHE_FILE(), json)
+    lastWrittenWorkspaceJson = json
   } catch (error) {
-    perfLog('workspace cache write failed: ' + error.message)
+    perfLog('workspace cache flush failed: ' + error.message)
   }
 }
 
@@ -155,6 +247,7 @@ const trustedOrigins = new WeakMap()
 let mainWindow = null;
 let notificationFeed = null;
 let localDshProcess = null;
+let localDshRetryAfter = 0
 let appIsQuitting = false;
 
 /** Self-update service; broadcasts state snapshots to every home window. */
@@ -182,6 +275,8 @@ const updater = createUpdater({
     // takes over; mirrors T3 Code stopping its backend pool pre-install.
     notificationFeed?.stop()
     stopLocalDsh(localDshProcess)
+    flushWorkspaceCacheSync()
+    flushPerfLogSync()
   },
   isQuitting: () => appIsQuitting,
 })
@@ -209,8 +304,19 @@ function loadLocalHost(win) {
 }
 
 /** Spawn dsh web if needed and wait for readiness; never navigates. */
-function ensureLocalDshRunning(timeoutMs = LOCAL_CONNECT_TIMEOUT_MS) {
-  if (localDshProcess && localDshProcess.exitCode === null) return Promise.resolve()
+async function ensureLocalDshRunning(timeoutMs = LOCAL_CONNECT_TIMEOUT_MS, { force = false } = {}) {
+  if (localDshProcess && localDshProcess.exitCode === null) return
+  if (!force && Date.now() < localDshRetryAfter) {
+    try {
+      if (await requestReady(LOCAL_DSH_URL)) {
+        localDshRetryAfter = 0
+        return
+      }
+    } catch {
+      // Keep the short readiness check best-effort during the cooldown.
+    }
+    throw new Error('Local DSH Web is unavailable; automatic retry is paused temporarily.')
+  }
   let child
   child = startLocalDsh({
     onExit: (code, signal, output, error) => {
@@ -220,11 +326,14 @@ function ensureLocalDshRunning(timeoutMs = LOCAL_CONNECT_TIMEOUT_MS) {
     },
   })
   localDshProcess = child
-  return waitForDsh(LOCAL_DSH_URL, timeoutMs, child).catch(async (error) => {
+  return waitForDsh(LOCAL_DSH_URL, timeoutMs, child).then(() => {
+    localDshRetryAfter = 0
+  }).catch(async (error) => {
     // A second `dsh web` cannot bind while an instance already serves 3080.
     // If something healthy answers anyway, use it instead of failing the card.
     try {
       if (await requestReady(LOCAL_DSH_URL)) {
+        localDshRetryAfter = 0
         stopLocalDsh(child)
         if (localDshProcess === child) localDshProcess = null
         return
@@ -234,12 +343,13 @@ function ensureLocalDshRunning(timeoutMs = LOCAL_CONNECT_TIMEOUT_MS) {
     }
     stopLocalDsh(child)
     if (localDshProcess === child) localDshProcess = null
+    localDshRetryAfter = Date.now() + LOCAL_START_RETRY_COOLDOWN_MS
     throw new Error(error.message + ' Make sure the existing dsh command is installed and port 3080 is available.')
   })
 }
 
 async function startLocalDshWeb(win) {
-  await ensureLocalDshRunning(LOCAL_CONNECT_TIMEOUT_MS)
+  await ensureLocalDshRunning(LOCAL_CONNECT_TIMEOUT_MS, { force: true })
   loadLocalHost(win)
 }
 
@@ -271,8 +381,9 @@ function createWindow(targetUrl) {
     show: false,
     backgroundColor: '#1f1f1f',
     webPreferences: {
-      // Never throttle this window's own rendering when hidden.
-      backgroundThrottling: false,
+      // Keep Chromium's normal background throttling for smooth battery use.
+      // Main-process notifications continue independently while hidden.
+      backgroundThrottling: true,
       contextIsolation: true,
       nodeIntegration: false,
       preload: path.join(__dirname, 'preload.js'),
@@ -316,6 +427,25 @@ function showHome() {
 }
 
 app.whenReady().then(() => {
+  // Minimal menu so users can always get back to the aggregated dashboard.
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      {
+        label: 'App',
+        submenu: [
+          { label: 'Workspaces…', accelerator: 'CmdOrCtrl+H', click: () => showHome() },
+          { label: 'Check for Updates…', click: () => { void updater.check('menu').catch(() => {}) } },
+          { type: 'separator' },
+          process.platform === 'darwin'
+            ? { role: 'quit' }
+            : { role: 'close' },
+        ],
+      },
+      { role: 'editMenu' },
+      { role: 'viewMenu' },
+    ]),
+  )
+
   notificationFeed = new NotificationFeed({ onNotification: presentNotification })
 
   // Discovery starts on its own; failures never block app startup.
@@ -335,9 +465,10 @@ app.whenReady().then(() => {
   app.on('gpu-info-update', () => {
     perfLog('gpu update: ' + JSON.stringify(app.getGPUFeatureStatus()))
   })
-  setTimeout(() => {
+  const gpuSettleTimer = setTimeout(() => {
     perfLog('gpu settled: ' + JSON.stringify(app.getGPUFeatureStatus()))
   }, 5000)
+  gpuSettleTimer.unref?.()
 })
 
 app.on('before-quit', () => {
@@ -345,6 +476,8 @@ app.on('before-quit', () => {
   updater.dispose()
   notificationFeed?.stop()
   stopLocalDsh(localDshProcess)
+  flushWorkspaceCacheSync()
+  flushPerfLogSync()
 })
 
 app.on('window-all-closed', () => {
@@ -388,32 +521,27 @@ async function fetchRemoteServerData(host, fetchImpl, peers) {
   return { ...result, fetchedAt: Date.now() }
 }
 
-/** Probe responsive tailnet peers; only these become suggestions. */
+/** Lower-case hostnames of every saved server; used to filter suggestions. */
+function savedHostnames() {
+  return getHosts()
+    .map((host) => {
+      try { return new URL(host.url).hostname.toLowerCase() } catch { return '' }
+    })
+    .filter(Boolean)
+}
+
+/**
+ * Probe responsive tailnet peers; only these become suggestions. Probe labels
+ * are cached per candidate set (see tailnet-suggestions.js) so steady-state
+ * dashboard refreshes stop re-probing every peer once per minute.
+ */
 async function refreshTailnetSuggestions(tailnetStatus, fetchImpl) {
   if (!tailnetStatus?.available) return { available: false, peers: [] }
-  const savedHostnames = new Set(
-    getHosts()
-      .map((host) => {
-        try { return new URL(host.url).hostname.toLowerCase() } catch { return '' }
-      })
-      .filter(Boolean),
-  )
-  const candidates = tailnetStatus.peers
-    .filter((peer) => peer.dnsName && !savedHostnames.has(peer.dnsName.toLowerCase()))
-    .slice(0, TAILNET_SUGGESTION_LIMIT)
-  const probes = await probeCandidates(
-    candidates.map((peer) => 'https://' + peer.dnsName.toLowerCase() + '/'),
-    { fetchImpl, timeoutMs: 3500, concurrency: 4 },
-  )
-  const peers = candidates
-    .map((peer, index) => ({
-      dnsName: peer.dnsName,
-      hostName: peer.hostName ?? peer.dnsName.split('.')[0],
-      online: peer.online === true,
-      probe: probes[index],
-    }))
-    .filter((peer) => peer.probe !== 'unreachable')
-  return { available: true, peers }
+  return tailnetSuggestionTracker.refresh({
+    peers: tailnetStatus.peers,
+    savedHostnames: savedHostnames(),
+    probe: (urls) => probeCandidates(urls, { fetchImpl, timeoutMs: 3500, concurrency: 4 }),
+  })
 }
 
 function rememberServerResults(entries) {
@@ -421,12 +549,17 @@ function rememberServerResults(entries) {
   let changed = false
   for (const { host, result } of entries) {
     if (result.ok !== true) continue
-    cache.set(host.id, {
-      fetchedAt: result.fetchedAt,
-      workspaces: result.workspaces ?? [],
-      sessions: result.sessions,
-    })
-    changed = true
+    const fetchedAt = Number.isFinite(result.fetchedAt) ? result.fetchedAt : Date.now()
+    const workspaces = result.workspaces ?? []
+    const signature = JSON.stringify([workspaces, result.sessions])
+    const previous = cache.get(host.id)
+    const contentChanged = workspaceSignatures.get(host.id) !== signature
+    const touchDue = !previous || fetchedAt - previous.fetchedAt >= WORKSPACE_CACHE_TOUCH_MS
+    workspaceSignatures.set(host.id, signature)
+    // Keep the in-memory age current on every successful read. Persist only
+    // content changes or an occasional timestamp touch for offline accuracy.
+    cache.set(host.id, { fetchedAt, workspaces, sessions: result.sessions })
+    if (contentChanged || touchDue) changed = true
   }
   if (changed) saveWorkspaceCache()
 }
@@ -579,7 +712,9 @@ ipcMain.handle('hosts:add', (event, { name, url } = {}) => {
 ipcMain.handle('hosts:remove', (event, id) => {
   requireHome(event);
   saveHosts(getHosts().filter((h) => h.id !== id));
-  getWorkspaceCache().delete(String(id));
+  const removedId = String(id);
+  workspaceSignatures.delete(removedId);
+  getWorkspaceCache().delete(removedId);
   saveWorkspaceCache();
 });
 
@@ -617,23 +752,4 @@ ipcMain.handle('updates:set-channel', (event, channel) => {
   if (!isAllowedChannel(channel)) throw new Error('Unknown update channel.')
   return updater.setChannel(channel)
 });
-
-// Minimal menu so users can always get back to the aggregated dashboard.
-Menu.setApplicationMenu(
-  Menu.buildFromTemplate([
-    {
-      label: 'App',
-      submenu: [
-        { label: 'Workspaces…', accelerator: 'CmdOrCtrl+H', click: () => showHome() },
-        { label: 'Check for Updates…', click: () => { void updater.check('menu').catch(() => {}) } },
-        { type: 'separator' },
-        process.platform === 'darwin'
-          ? { role: 'quit' }
-          : { role: 'close' },
-      ],
-    },
-    { role: 'editMenu' },
-    { role: 'viewMenu' },
-  ]),
-)
 

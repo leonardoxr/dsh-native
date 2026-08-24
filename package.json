@@ -1,6 +1,6 @@
 {
   "name": "dsh-native",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A focused desktop shell for HTTPS web apps, with saved servers and fast reconnects.",
   "main": "src/main.js",
   "desktopName": "dsh-native.desktop",
@@ -31,7 +31,7 @@
   },
   "scripts": {
     "start": "electron .",
-    "check": "node --check src/main.js && node --check src/preload.js && node --check src/renderer/app.js && node --check src/lib/normalize-url.js && node --check src/lib/navigation-policy.js && node --check src/lib/local-dsh.js && node --check src/lib/sse-parser.js && node --check src/lib/notification-feed.js && node --check src/lib/notification-presenter.js && node --check src/lib/home-sender.js && node --check src/lib/companion-client.js && node --check src/lib/tailscale.js && node --check src/lib/workspace-aggregator.js && node --check src/lib/home-presentation.js && node --check src/lib/update-machine.js && node --check src/lib/update-channels.js && node --check src/lib/release-notes.js && node --check src/lib/updater.js",
+    "check": "node --check src/main.js && node --check src/preload.js && node --check src/renderer/app.js && node --check src/lib/normalize-url.js && node --check src/lib/navigation-policy.js && node --check src/lib/local-dsh.js && node --check src/lib/sse-parser.js && node --check src/lib/notification-feed.js && node --check src/lib/notification-presenter.js && node --check src/lib/home-sender.js && node --check src/lib/companion-client.js && node --check src/lib/tailscale.js && node --check src/lib/tailnet-suggestions.js && node --check src/lib/workspace-aggregator.js && node --check src/lib/home-presentation.js && node --check src/lib/update-machine.js && node --check src/lib/update-channels.js && node --check src/lib/release-notes.js && node --check src/lib/updater.js",
     "test": "node --test",
     "package": "electron-builder --dir",
     "dist": "electron-builder --publish never"

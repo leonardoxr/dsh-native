@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-24
+
 ### Added
 
 - Self-updating desktop app, modeled on T3 Code's updater: automatic feed checks shortly after launch and every 30 minutes, with download and install strictly behind explicit user actions.
@@ -11,6 +13,19 @@ All notable changes to this project are documented here. The format is based on 
 - Restart-to-update flow that gracefully stops the managed local DSH instance before silently installing the pending build and relaunching.
 - Precise disabled states instead of silent failures: portable Windows builds, Linux .deb installs, unsigned macOS bundles, development checkouts, and `DSH_NATIVE_DISABLE_AUTO_UPDATE` all explain why updates are unavailable.
 - Updater feed manifests (`latest.yml`, `latest-mac.yml`, `latest-linux.yml`) and the Windows blockmap are now published with each release so installed apps can find new versions.
+
+### Changed
+
+- Restore Chromium's normal background throttling and occlusion handling on macOS; hidden remote pages no longer run at full renderer/timer rate while the main-process notification feed stays live.
+- Pause Workspaces refresh and age timers while the window is hidden, and update visible ages in place instead of rebuilding the dashboard DOM.
+- Reconcile dashboard rows by key so stable workspace, session, and server elements retain focus and event handlers across refreshes.
+- Cache Tailscale Companion probes per peer for five minutes and probe only new or expired candidates, while refreshing online labels from memoized Tailscale status.
+- Move workspace-cache and performance-log writes off the main-process hot path, coalesce them, and avoid disk writes when content is unchanged.
+
+### Fixed
+
+- Back off repeated failed local DSH Web launches for five minutes during automatic dashboard refreshes; an explicit Open action still retries immediately.
+- Preserve server rename input while periodic dashboard updates occur.
 
 ## [0.2.0] - 2026-08-24
 
