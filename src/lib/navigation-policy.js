@@ -10,7 +10,17 @@ const { normalizeUrl } = require('./normalize-url')
  * @returns {{ action: 'allow' | 'deny' | 'external', url: string | null }}
  */
 function classifyNavigation(trustedOrigin, targetUrl) {
-  const normalized = normalizeUrl(targetUrl)
+  let normalized = normalizeUrl(targetUrl)
+  if (!normalized) {
+    try {
+      const local = new URL(targetUrl)
+      if (local.protocol === 'http:' && local.hostname === '127.0.0.1' && local.port === '3080') {
+        normalized = local.toString()
+      }
+    } catch {
+      // Malformed URLs remain denied.
+    }
+  }
   if (!normalized) return { action: 'deny', url: null }
 
   if (trustedOrigin && new URL(normalized).origin === trustedOrigin) {

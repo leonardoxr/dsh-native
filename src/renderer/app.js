@@ -3,11 +3,25 @@
 const list = document.getElementById('host-list')
 const form = document.getElementById('add-form')
 const errorEl = document.getElementById('error')
+const startLocalBtn = document.getElementById('start-local')
 
 function showError(message) {
   errorEl.textContent = message
   errorEl.hidden = false
 }
+
+startLocalBtn.addEventListener('click', async () => {
+  startLocalBtn.disabled = true
+  errorEl.hidden = true
+  startLocalBtn.textContent = 'Starting DSH Web…'
+  try {
+    await window.dshNative.startLocal()
+  } catch (err) {
+    showError(err.message ?? 'Failed to start local DSH Web.')
+    startLocalBtn.disabled = false
+    startLocalBtn.textContent = 'Start local DSH Web (port 3080)'
+  }
+})
 
 async function refresh() {
   const hosts = await window.dshNative.listHosts()

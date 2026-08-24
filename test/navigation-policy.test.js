@@ -19,6 +19,14 @@ test('sends cross-origin HTTPS navigation to the system browser', () => {
   assert.equal(classifyNavigation(undefined, 'https://example.com/').action, 'external')
 })
 
+test('allows the managed local DSH Web origin', () => {
+  assert.deepEqual(classifyNavigation('http://127.0.0.1:3080', 'http://127.0.0.1:3080/projects'), {
+    action: 'allow',
+    url: 'http://127.0.0.1:3080/projects',
+  })
+  assert.equal(classifyNavigation('http://127.0.0.1:3080', 'http://127.0.0.1:3081/').action, 'deny')
+})
+
 test('denies malformed and non-HTTPS navigation', () => {
   assert.deepEqual(classifyNavigation('https://example.com', 'http://example.com/'), {
     action: 'deny',

@@ -31,7 +31,7 @@
   },
   "scripts": {
     "start": "electron .",
-    "check": "node --check src/main.js && node --check src/preload.js && node --check src/renderer/app.js && node --check src/lib/normalize-url.js && node --check src/lib/navigation-policy.js && node --check src/lib/sse-parser.js && node --check src/lib/notification-feed.js && node --check src/lib/notification-presenter.js",
+    "check": "node --check src/main.js && node --check src/preload.js && node --check src/renderer/app.js && node --check src/lib/normalize-url.js && node --check src/lib/navigation-policy.js && node --check src/lib/local-dsh.js && node --check src/lib/sse-parser.js && node --check src/lib/notification-feed.js && node --check src/lib/notification-presenter.js",
     "test": "node --test",
     "package": "electron-builder --dir",
     "dist": "electron-builder --publish never"

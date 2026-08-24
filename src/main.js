@@ -7,6 +7,7 @@ const { pathToFileURL } = require('node:url')
 const fs = require('node:fs')
 const crypto = require('node:crypto')
 const { normalizeUrl } = require('./lib/normalize-url')
+const { LOCAL_DSH_URL, startLocalDsh, stopLocalDsh, waitForDsh } = require('./lib/local-dsh')
 const { classifyNavigation } = require('./lib/navigation-policy')
 const { NotificationFeed } = require('./lib/notification-feed')
 const { createNotificationPresenter } = require('./lib/notification-presenter')
@@ -65,6 +66,7 @@ const trustedOrigins = new WeakMap()
 
 let mainWindow = null
 let notificationFeed = null
+let localDshProcess = null
 
 const presentNotification = createNotificationPresenter({
   Notification,
@@ -75,6 +77,38 @@ function loadPicker(win) {
   notificationFeed?.stop()
   trustedOrigins.delete(win)
   void win.loadFile(path.join(__dirname, 'renderer', 'index.html'))
+}
+
+function loadLocalHost(win) {
+  trustedOrigins.set(win, new URL(LOCAL_DSH_URL).origin)
+  // The notification feed intentionally remains HTTPS-only; local DSH Web can
+  // still be used normally without enabling a privileged remote feed.
+  void win.loadURL(LOCAL_DSH_URL)
+}
+
+async function startLocalDshWeb(win) {
+  if (localDshProcess && localDshProcess.exitCode === null) {
+    loadLocalHost(win)
+    return
+  }
+
+  let child
+  child = startLocalDsh({
+    onExit: (code, signal, output, error) => {
+      if (localDshProcess === child) localDshProcess = null
+      if (error) perfLog('dsh web failed to start: ' + error.message)
+      else if (code !== 0) perfLog('dsh web exited (' + (code ?? signal) + '): ' + output.trim())
+    },
+  })
+  localDshProcess = child
+  try {
+    await waitForDsh(LOCAL_DSH_URL, 30000, child)
+    loadLocalHost(win)
+  } catch (error) {
+    stopLocalDsh(child)
+    if (localDshProcess === child) localDshProcess = null
+    throw new Error(error.message + ' Make sure the existing dsh command is installed and port 3080 is available.')
+  }
 }
 
 function loadHost(win, targetUrl) {
@@ -171,7 +205,10 @@ app.whenReady().then(() => {
   }, 5000)
 })
 
-app.on('before-quit', () => notificationFeed?.stop())
+app.on('before-quit', () => {
+  notificationFeed?.stop()
+  stopLocalDsh(localDshProcess)
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
@@ -184,6 +221,13 @@ function requirePicker(event) {
     throw new Error('Host management is available only from the local server picker.')
   }
 }
+
+ipcMain.handle('local:start', async (event) => {
+  requirePicker(event)
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win) throw new Error('The native window is unavailable.')
+  await startLocalDshWeb(win)
+})
 
 ipcMain.handle('hosts:list', (event) => {
   requirePicker(event)

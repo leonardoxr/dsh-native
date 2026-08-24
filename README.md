@@ -48,9 +48,11 @@ This workaround is necessary only until releases are Developer ID signed and not
 ### Use DSH Native
 
 1. Launch DSH Native.
-2. Add a display name and an `https://` URL.
+2. Choose **Start local DSH Web (port 3080)** to run the existing `dsh` CLI installation, or add a display name and an `https://` URL.
 3. Select the server to connect.
 4. Use **App → Servers…** or <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>H</kbd> to return to the server list.
+
+The local option runs `dsh web --port 3080`, waits for it to become ready, and stops the process when DSH Native exits. It requires the `dsh` command to be available on `PATH`; port 3080 must be free.
 
 Only HTTPS URLs can be saved. Add servers you trust: connected sites run inside the desktop window and retain normal Chromium site storage in DSH Native's per-user application profile. The server list and performance log are stored locally in Electron's `userData` directory.
 
@@ -105,7 +107,7 @@ Create an unpacked app for the current platform with `npm run package`, or distr
 src/
 ├── main.js                 Electron main process and server management
 ├── preload.js              Context-isolated bridge for the local picker
-├── lib/                    URL policy, SSE feed, deduplication, and notification presentation
+├── lib/                    URL policy, local DSH launcher, SSE feed, deduplication, and notification presentation
 └── renderer/               Bundled server-picker HTML, CSS, and JavaScript
 test/                       Node.js unit tests
 ios/                        Native SwiftUI iPhone/iPad app and tests
