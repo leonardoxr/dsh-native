@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-08-24
+
+### Fixed
+
+- Show immediate accessible feedback while checking for updates instead of leaving the Check action visually silent.
+
 ## [0.4.3] - 2026-08-24
 
 ### Fixed

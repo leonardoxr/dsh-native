@@ -573,7 +573,11 @@ function presentUpdateState(state) {
   if (document.activeElement !== updateChannelEl) updateChannelEl.value = state.channel
   const busy = state.status === 'checking' || state.status === 'downloading'
   updateChannelEl.disabled = !state.enabled || busy
+  updateCheckBtn.disabled = !state.enabled || busy
   updateCheckBtn.hidden = !state.enabled || busy || state.status === 'downloaded'
+  updateCheckBtn.textContent = state.status === 'checking' ? 'Checking...' : 'Check'
+  updateCheckBtn.title = state.status === 'checking' ? 'Checking for updates' : 'Check for updates'
+  updatesSection.setAttribute('aria-busy', busy ? 'true' : 'false')
 }
 
 updateChannelEl.addEventListener('change', async () => {
@@ -588,13 +592,25 @@ updateChannelEl.addEventListener('change', async () => {
 
 updateCheckBtn.addEventListener('click', async () => {
   clearError()
-  updateCheckBtn.disabled = true
+  if (lastUpdateState) {
+    // Paint the pending state locally before waiting on IPC. This guarantees
+    // visible feedback even when the updater answers faster than its pushed
+    // snapshot can cross the renderer boundary.
+    presentUpdateState({
+      ...lastUpdateState,
+      status: 'checking',
+      message: null,
+      errorContext: null,
+      canRetry: false,
+      downloadPercent: lastUpdateState.downloadedVersion === null ? null : 100,
+    })
+  }
   try {
-    presentUpdateState((await Dsh.checkForUpdates()).state)
+    const result = await Dsh.checkForUpdates()
+    presentUpdateState(result && result.state ? result.state : lastUpdateState)
   } catch (err) {
     showError(err.message ?? 'The update check failed.')
-  } finally {
-    updateCheckBtn.disabled = false
+    if (lastUpdateState) presentUpdateState(lastUpdateState)
   }
 })
 
