@@ -1,5 +1,7 @@
 <p align="center"><img src="build/icon.png" width="128" alt="DSH Native terminal icon" /></p>
 
+English | [简体中文](README.zh.md)
+
 # DSH Native
 
 [![CI](https://github.com/leonardoxr/dsh-native/actions/workflows/ci.yml/badge.svg)](https://github.com/leonardoxr/dsh-native/actions/workflows/ci.yml)
