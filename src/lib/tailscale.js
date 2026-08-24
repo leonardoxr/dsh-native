@@ -97,8 +97,9 @@ function readTailscaleStatus({ timeoutMs = DEFAULT_TIMEOUT_MS, platform = proces
       try { child?.kill() } catch { /* already gone */ }
       resolve(result)
     }
+    // The timeout completes an active CLI operation and must remain a
+    // referenced handle until the child exits or the deadline fires.
     timer = setTimeout(() => finish({ status: null, diagnostic: 'timeout' }), Math.max(1, timeoutMs))
-    timer.unref?.()
     try {
       child = spawnImpl(tailscaleCommand(platform), ['status', '--json'], {
         windowsHide: true,

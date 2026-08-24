@@ -114,8 +114,9 @@ function classifyNetworkError(error) {
 async function fetchJsonWithTimeout(url, { fetchImpl, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   if (typeof fetchImpl !== 'function') throw new TypeError('fetchImpl must be a function')
   const controller = new AbortController()
+  // This timeout belongs to an active request, so it must keep the
+  // process alive long enough to reject a stalled fetch.
   const timer = setTimeout(() => controller.abort(new Error('timeout')), Math.max(1, timeoutMs))
-  timer.unref?.()
   try {
     const response = await fetchImpl(url, {
       credentials: 'include',

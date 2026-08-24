@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-24
+
+### Fixed
+
+- Keep active Companion and Tailscale timeout handles referenced until their stalled operations settle, preventing Linux release validation from exiting with cancelled tests.
+
 ## [0.4.0] - 2026-08-24
 
 ### Added
