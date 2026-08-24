@@ -76,6 +76,21 @@ test('unusable timestamps fall back to createdAt, then epoch zero', () => {
   assert.deepEqual(workspaceRows.map((row) => row.title), ['Fine', 'Created', 'Zero']);
 })
 
+test('workspace recency follows the latest persisted session activity', () => {
+  const { workspaceRows } = aggregateServers([{
+    host: HOST_A,
+    result: ok([
+      ws('old-workspace', 'Old workspace', '/old', '2024-06-30T00:00:00Z', ['old-session']),
+      ws('active-workspace', 'Active workspace', '/active', '2024-01-01T00:00:00Z', ['active-session']),
+    ], [
+      { id: 'old-session', title: 'Old', cwd: '/old', createdAt: 1, updatedAt: '2024-02-01T00:00:00Z' },
+      { id: 'active-session', title: 'Active', cwd: '/active', createdAt: 1, updatedAt: '2024-07-01T00:00:00Z' },
+    ]),
+  }]);
+  assert.deepEqual(workspaceRows.map((row) => row.title), ['Active workspace', 'Old workspace']);
+  assert.equal(workspaceRows[0].updatedAt, Date.parse('2024-07-01T00:00:00Z'));
+});
+
 test('toEpoch accepts epochs and ISO strings only', () => {
   assert.equal(toEpoch(1717200000000), 1717200000000);
   assert.equal(toEpoch('2024-06-01T00:00:00Z'), Date.parse('2024-06-01T00:00:00Z'));

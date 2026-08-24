@@ -37,7 +37,7 @@ const WORKSPACES = { workspaces: [
   { id: 'bad', path: '/missing-title' },
 ] };
 const SESSIONS = { sessions: [
-  { id: 's1', title: 'One', cwd: '/repo/alpha', createdAt: 1717200000000 },
+  { id: 's1', title: 'One', cwd: '/repo/alpha', createdAt: 1717200000000, updatedAt: 1717400000000 },
   { id: 's9', title: null, cwd: null, createdAt: 1717300000000 },
 ] };
 
@@ -67,6 +67,8 @@ test('fetches both endpoints with short timeouts and returns validated data', as
   assert.equal(result.failure, null);
   assert.equal(result.workspaces.length, 1);
   assert.equal(result.sessions.length, 2);
+  assert.equal(result.sessions.find((session) => session.id === 's1').updatedAt, 1717400000000);
+  assert.equal(result.sessions.find((session) => session.id === 's9').updatedAt, 1717300000000);
 });
 
 test('a failed sessions read degrades enrichment without failing the server', async () => {

@@ -77,12 +77,14 @@ function validateSessionItem(value) {
   const id = text(value.id, 256)
   if (!id) return null
   const createdAt = toMillis(value.createdAt)
-  if (createdAt === null) return null
+  const updatedAt = toMillis(value.updatedAt) ?? createdAt
+  if (createdAt === null || updatedAt === null) return null
   return {
     id,
     title: typeof value.title === 'string' ? value.title.slice(0, 200) : null,
     cwd: typeof value.cwd === 'string' ? value.cwd.slice(0, 1024) : null,
     createdAt,
+    updatedAt,
   }
 }
 
