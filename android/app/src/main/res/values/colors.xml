@@ -1,0 +1,9 @@
+<resources>
+    <color name="accent">#149FE8</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="background">#F6F7F9</color>
+    <color name="text_primary">#17181A</color>
+    <color name="text_secondary">#72757A</color>
+    <color name="border">#1A000000</color>
+    <color name="warning">#A45A00</color>
+</resources>

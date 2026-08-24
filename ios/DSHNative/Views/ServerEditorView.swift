@@ -49,7 +49,10 @@ struct ServerEditorView: View {
                 } header: {
                     Text("Server")
                 } footer: {
-                    Text("Only trusted HTTPS servers can be opened. Credentials belong in the server’s sign-in page.")
+                    Text(
+                        "HTTPS is required. If iOS cannot validate a private certificate, "
+                            + "DSH Native will show its fingerprint and ask before trusting it."
+                    )
                 }
 
                 if !draft.urlText.isEmpty {

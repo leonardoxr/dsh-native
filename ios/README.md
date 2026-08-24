@@ -23,7 +23,8 @@ Stock iOS requires every installed native app to be signed. Simulator builds can
 - The selected origin is always visible in trusted native chrome.
 - Same-origin main-frame navigation stays in WebKit.
 - User-activated, top-level cross-origin HTTPS links open in Safari; automatic cross-origin redirects are blocked. Subresources and frames still follow WebKit's normal web security model.
-- TLS uses normal iOS trust evaluation. Self-signed or invalid certificates are never bypassed.
+- TLS uses normal iOS trust evaluation. A private/self-signed certificate can be trusted only after an explicit per-server fingerprint review; changed certificates prompt again, and the saved exception can be revoked. Hostname mismatches and expired/not-yet-valid certificates remain blocked.
+- The browser header opens a safe-area-aware server drawer without abandoning the current page; reduced-motion settings are respected.
 - No JavaScript bridge, injected scripts, analytics, telemetry, or background modes are included.
 - Camera and microphone access is denied by default.
 - Website cookies and local storage persist through WebKit and can be cleared from the server list.

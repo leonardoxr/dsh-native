@@ -14,9 +14,12 @@ struct RootView: View {
     var body: some View {
         Group {
             if let activeServer {
-                BrowserScreen(server: activeServer) {
-                    activeServerID = nil
-                }
+                BrowserScreen(
+                    server: activeServer,
+                    store: store,
+                    onSelectServer: { server in connect(to: server) },
+                    onShowServers: { activeServerID = nil }
+                )
                 .id(activeServer.id)
             } else {
                 ServerListView(store: store) { server in

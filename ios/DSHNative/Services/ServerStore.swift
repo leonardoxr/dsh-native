@@ -52,6 +52,11 @@ final class ServerStore: ObservableObject {
                     continue
                 }
                 server.url = normalizedURL
+                if let fingerprint = server.trustedCertificateFingerprint,
+                    !ServerURLPolicy.isSHA256Fingerprint(fingerprint)
+                {
+                    server.trustedCertificateFingerprint = nil
+                }
                 validServers.append(server)
             }
 
@@ -115,6 +120,9 @@ final class ServerStore: ObservableObject {
             guard let index = nextServers.firstIndex(where: { $0.id == id }) else {
                 throw StoreError.serverNotFound
             }
+            if nextServers[index].url != normalizedURL {
+                nextServers[index].trustedCertificateFingerprint = nil
+            }
             nextServers[index].name = name
             nextServers[index].url = normalizedURL
             savedServer = nextServers[index]
@@ -131,6 +139,28 @@ final class ServerStore: ObservableObject {
         let nextServers = servers.filter { $0.id != id }
         let nextLastID = lastConnectedServerID == id ? nil : lastConnectedServerID
         try commit(servers: nextServers, lastConnectedServerID: nextLastID)
+    }
+
+    func trustCertificate(fingerprint: String, for id: UUID) throws {
+        guard ServerURLPolicy.isSHA256Fingerprint(fingerprint),
+            let index = servers.firstIndex(where: { $0.id == id })
+        else {
+            throw StoreError.serverNotFound
+        }
+
+        var nextServers = servers
+        nextServers[index].trustedCertificateFingerprint = fingerprint
+        try commit(servers: nextServers, lastConnectedServerID: lastConnectedServerID)
+    }
+
+    func revokeCertificateTrust(for id: UUID) throws {
+        guard let index = servers.firstIndex(where: { $0.id == id }) else {
+            throw StoreError.serverNotFound
+        }
+
+        var nextServers = servers
+        nextServers[index].trustedCertificateFingerprint = nil
+        try commit(servers: nextServers, lastConnectedServerID: lastConnectedServerID)
     }
 
     func markConnected(id: UUID) throws {

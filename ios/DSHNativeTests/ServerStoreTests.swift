@@ -63,6 +63,23 @@ final class ServerStoreTests: XCTestCase {
         XCTAssertEqual(store.servers.first?.url.absoluteString, "https://stable.example.com/")
     }
 
+    func testCertificateTrustPersistsAndCanBeRevoked() throws {
+        let persistence = MemoryServerPersistence()
+        let store = ServerStore(persistence: persistence)
+        let server = try store.upsert(ServerDraft(name: "Private", urlText: "private.example.com"))
+        let fingerprint = ServerURLPolicy.sha256Fingerprint(Data())
+
+        try store.trustCertificate(fingerprint: fingerprint, for: server.id)
+        XCTAssertEqual(store.servers.first?.trustedCertificateFingerprint, fingerprint)
+        XCTAssertEqual(
+            ServerStore(persistence: persistence).servers.first?.trustedCertificateFingerprint,
+            fingerprint
+        )
+
+        try store.revokeCertificateTrust(for: server.id)
+        XCTAssertNil(store.servers.first?.trustedCertificateFingerprint)
+    }
+
     func testDeletingLastConnectedServerClearsReconnectID() throws {
         let persistence = MemoryServerPersistence()
         let store = ServerStore(persistence: persistence)

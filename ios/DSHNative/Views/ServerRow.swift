@@ -31,6 +31,13 @@ struct ServerRow: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+
+                if server.trustedCertificateFingerprint != nil {
+                    Label("Manual certificate trust", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.orange)
+                        .lineLimit(1)
+                }
             }
 
             Spacer(minLength: 8)

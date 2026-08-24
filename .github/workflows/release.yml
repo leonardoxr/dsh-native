@@ -149,9 +149,48 @@ jobs:
             dist/latest-mac.yml
             dist/latest-linux.yml
 
+  mobile-android:
+    name: Build Android companion
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Test, lint, and build Android companion
+        run: gradle -p android lintDebug testDebugUnitTest assembleDebug --no-daemon
+
+      - name: Stage Android debug APK
+        shell: bash
+        run: |
+          mkdir -p release
+          version="${GITHUB_REF_NAME#v}"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "release/DSH-Native-${version}-android-debug.apk"
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-debug
+          if-no-files-found: error
+          retention-days: 7
+          path: release/*.apk
+
   publish:
     name: Publish GitHub release
-    needs: build
+    needs: [build, mobile-android]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -180,6 +219,7 @@ jobs:
             "DSH-Native-$version-linux-x86_64.AppImage"
             "DSH-Native-$version-linux-amd64.deb"
             "latest-linux.yml"
+            "DSH-Native-$version-android-debug.apk"
           )
           for artifact in "${expected[@]}"; do
             test -f "$artifact" || { echo "Missing release artifact: $artifact"; exit 1; }

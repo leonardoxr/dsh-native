@@ -8,7 +8,7 @@
 
 A focused native shell for HTTPS web apps—with saved servers, fast reconnects, and a first-class workflow for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
-DSH Native keeps frequently used web apps out of ordinary browser tabs. The repository includes the cross-platform Electron desktop app and a native SwiftUI companion for iPhone and iPad. Both remember multiple trusted servers and return to the most recently used one at launch.
+DSH Native keeps frequently used web apps out of ordinary browser tabs. The repository includes the cross-platform Electron desktop app plus native SwiftUI/WebKit iOS and Android/WebView companions. All clients remember multiple saved servers and return to the most recently used one at launch.
 
 ## Highlights
 
@@ -19,7 +19,8 @@ DSH Native keeps frequently used web apps out of ordinary browser tabs. The repo
 - **Battery-aware background behavior** — hidden pages use Chromium throttling, dashboard polling pauses off-screen, and the native notification feed remains live in the main process.
 - **Native attention alerts** — companion events become deduplicated OS notifications for completed, blocked, failed, question, and approval states.
 - **Hardened boundary** — remote pages receive no native host-management capability, and cross-origin navigation opens in the system browser.
-- **Native mobile companion** — a polished SwiftUI and WebKit implementation supports iPhone and iPad without Electron or third-party runtime dependencies.
+- **Native mobile companions** — iOS and Android use platform WebView shells with safe-area-aware server drawers, no Electron runtime, and no third-party runtime dependencies.
+- **Explicit private-certificate trust** — iOS and Android show the exact HTTPS host and SHA-256 certificate fingerprint before allowing a per-server self-signed/private certificate exception; changed certificates require review again and every exception is revocable.
 
 ## Download
 
@@ -30,8 +31,9 @@ Prebuilt installers and portable packages are published on the [Releases page](h
 | Windows x64 | NSIS installer and portable executable |
 | macOS Apple silicon | DMG and ZIP |
 | Linux x64 | AppImage and Debian package |
+| Android API 26+ | Debug APK (manual install; not Play-signed) |
 
-macOS releases target Apple silicon (arm64); Intel Macs are not supported.
+macOS releases target Apple silicon (arm64); Intel Macs are not supported. iOS builds require signing with your Apple team; the Xcode project and remote build helper are included in `ios/`.
 
 > [!IMPORTANT]
 > Windows binaries are unsigned. Starting with v0.1.1, macOS apps carry an ad-hoc integrity signature but are not Apple Developer ID signed or notarized. SmartScreen or Gatekeeper may therefore require an explicit first launch. Verify the file against the release's `SHA256SUMS.txt`; see [release documentation](docs/RELEASING.md).
@@ -95,6 +97,7 @@ See the [companion installation guide](https://github.com/leonardoxr/dsh-compani
 - npm 10 or newer
 - A supported Windows, macOS, or Linux desktop
 - For iOS work: an Apple-silicon Mac with Xcode 26 and XcodeGen 2.46
+- For Android work: Android Studio Ladybug or newer, Android SDK 34, and JDK 17+
 
 ```sh
 git clone https://github.com/leonardoxr/dsh-native.git
@@ -112,6 +115,19 @@ npm test
 
 Create an unpacked app for the current platform with `npm run package`, or distributable installers with `npm run dist`. Outputs are written to `dist/`.
 
+Build the mobile companions independently:
+
+```sh
+# Android
+gradle -p android testDebugUnitTest assembleDebug
+
+# iOS (on an Apple-silicon Mac)
+cd ios
+SIMULATOR_NAME="iPhone 17 Pro" scripts/build.sh
+```
+
+Both mobile shells require explicit per-server review before using a private/self-signed certificate.
+
 ### Project layout
 
 ```text
@@ -123,6 +139,7 @@ src/
 └── renderer/               Bundled Workspace Home dashboard HTML, CSS, and JavaScript
 test/                       Node.js unit tests
 ios/                        Native SwiftUI iPhone/iPad app and tests
+android/                    Native Android WebView app and policy tests
 scripts/                    Reusable local and remote build helpers
 .github/                    CI, releases, and contribution templates
 docs/RELEASING.md           Maintainer release process

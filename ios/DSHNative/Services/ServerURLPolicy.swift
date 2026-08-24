@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 enum ServerURLPolicyError: LocalizedError, Equatable {
@@ -47,6 +48,20 @@ enum MainFrameNavigationDecision: Equatable {
 }
 
 enum ServerURLPolicy {
+    static func isSHA256Fingerprint(_ value: String) -> Bool {
+        let parts = value.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 32 else { return false }
+        return parts.allSatisfy { part in
+            part.count == 2 && part.allSatisfy { $0.isHexDigit }
+        }
+    }
+
+    static func sha256Fingerprint(_ certificateData: Data) -> String {
+        SHA256.hash(data: certificateData)
+            .map { String(format: "%02X", $0) }
+            .joined(separator: ":")
+    }
+
     static func normalize(_ input: String) throws -> URL {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw ServerURLPolicyError.empty }

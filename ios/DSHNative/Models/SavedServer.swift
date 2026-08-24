@@ -6,19 +6,22 @@ struct SavedServer: Codable, Equatable, Identifiable {
     var url: URL
     var createdAt: Date
     var lastUsedAt: Date?
+    var trustedCertificateFingerprint: String?
 
     init(
         id: UUID = UUID(),
         name: String,
         url: URL,
         createdAt: Date = Date(),
-        lastUsedAt: Date? = nil
+        lastUsedAt: Date? = nil,
+        trustedCertificateFingerprint: String? = nil
     ) {
         self.id = id
         self.name = name
         self.url = url
         self.createdAt = createdAt
         self.lastUsedAt = lastUsedAt
+        self.trustedCertificateFingerprint = trustedCertificateFingerprint
     }
 
     var displayHost: String {

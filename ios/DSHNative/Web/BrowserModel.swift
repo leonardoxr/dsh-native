@@ -1,11 +1,20 @@
 import Combine
 import Foundation
+import Security
 import UIKit
 import WebKit
+
+struct CertificateTrustPrompt: Identifiable {
+    let id = UUID()
+    let host: String
+    let fingerprint: String
+    let isReplacement: Bool
+}
 
 @MainActor
 final class BrowserModel: NSObject, ObservableObject {
     let server: SavedServer
+    let store: ServerStore
     let webView: WKWebView
 
     @Published private(set) var isLoading = false
@@ -14,18 +23,24 @@ final class BrowserModel: NSObject, ObservableObject {
     @Published private(set) var currentURL: URL?
     @Published private(set) var errorMessage: String?
     @Published private(set) var errorURL: URL?
+    @Published var certificateTrustPrompt: CertificateTrustPrompt?
+    @Published private(set) var hasManuallyTrustedCertificate: Bool
 
     private let openExternal: (URL) -> Void
     private var hasLoadedInitialRequest = false
+    private var certificateTrustCompletion: (@MainActor @Sendable (Bool) -> Void)?
 
     init(
         server: SavedServer,
+        store: ServerStore,
         openExternal: @escaping (URL) -> Void = { url in
             UIApplication.shared.open(url)
         }
     ) {
         self.server = server
+        self.store = store
         self.openExternal = openExternal
+        hasManuallyTrustedCertificate = server.trustedCertificateFingerprint != nil
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
@@ -86,7 +101,43 @@ final class BrowserModel: NSObject, ObservableObject {
         webView.goForward()
     }
 
+    func acceptCertificateTrust() {
+        guard let prompt = certificateTrustPrompt else { return }
+        do {
+            try store.trustCertificate(fingerprint: prompt.fingerprint, for: server.id)
+            hasManuallyTrustedCertificate = true
+            finishCertificateTrust(accepted: true)
+        } catch {
+            errorMessage = error.localizedDescription
+            finishCertificateTrust(accepted: false)
+        }
+    }
+
+    func rejectCertificateTrust() {
+        errorMessage = "The certificate was not trusted."
+        finishCertificateTrust(accepted: false)
+    }
+
+    func revokeCertificateTrust() {
+        do {
+            try store.revokeCertificateTrust(for: server.id)
+            hasManuallyTrustedCertificate = false
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func finishCertificateTrust(accepted: Bool) {
+        let completion = certificateTrustCompletion
+        certificateTrustCompletion = nil
+        certificateTrustPrompt = nil
+        completion?(accepted)
+    }
+
     func tearDown() {
+        certificateTrustCompletion?(false)
+        certificateTrustCompletion = nil
+        certificateTrustPrompt = nil
         webView.stopLoading()
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
@@ -105,6 +156,25 @@ final class BrowserModel: NSObject, ObservableObject {
         canGoBack = webView.canGoBack
         canGoForward = webView.canGoForward
         currentURL = webView.url
+    }
+
+    private func certificateIsEligibleForManualTrust(
+        _ certificate: SecCertificate,
+        host: String
+    ) -> Bool {
+        let policy = SecPolicyCreateSSL(true, host as CFString)
+        var candidateTrust: SecTrust?
+        guard SecTrustCreateWithCertificates(certificate, policy, &candidateTrust) == errSecSuccess,
+            let candidateTrust
+        else {
+            return false
+        }
+
+        guard SecTrustSetAnchorCertificates(candidateTrust, [certificate] as CFArray) == errSecSuccess else {
+            return false
+        }
+        SecTrustSetAnchorCertificatesOnly(candidateTrust, true)
+        return SecTrustEvaluateWithError(candidateTrust, nil)
     }
 
     private func handleMainFrameNavigation(
@@ -263,7 +333,63 @@ extension BrowserModel: WKNavigationDelegate {
         didReceive challenge: URLAuthenticationChallenge,
         completionHandler: @escaping @MainActor @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
-        completionHandler(.performDefaultHandling, nil)
+        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+            let trust = challenge.protectionSpace.serverTrust,
+            let trustedOrigin = WebOrigin(url: server.url),
+            challenge.protectionSpace.host.lowercased() == trustedOrigin.host,
+            (challenge.protectionSpace.port == 0 ? 443 : challenge.protectionSpace.port) == trustedOrigin.port
+        else {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+
+        if SecTrustEvaluateWithError(trust, nil) {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+
+        guard let certificateChain = SecTrustCopyCertificateChain(trust),
+            CFArrayGetCount(certificateChain) > 0
+        else {
+            errorMessage = "The server certificate could not be inspected."
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
+        let certificate = unsafeBitCast(
+            CFArrayGetValueAtIndex(certificateChain, 0),
+            to: SecCertificate.self
+        )
+
+        guard certificateIsEligibleForManualTrust(certificate, host: trustedOrigin.host) else {
+            errorMessage =
+                "The certificate does not match this host or is outside its validity period. "
+                + "DSH Native will not override that."
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
+
+        let fingerprint = ServerURLPolicy.sha256Fingerprint(
+            SecCertificateCopyData(certificate) as Data
+        )
+        if fingerprint == server.trustedCertificateFingerprint {
+            completionHandler(.useCredential, URLCredential(trust: trust))
+            return
+        }
+
+        let isReplacement = server.trustedCertificateFingerprint != nil
+        certificateTrustCompletion = { [weak self] accepted in
+            guard accepted else {
+                completionHandler(.cancelAuthenticationChallenge, nil)
+                return
+            }
+            completionHandler(.useCredential, URLCredential(trust: trust))
+            self?.errorMessage = nil
+        }
+        certificateTrustPrompt = CertificateTrustPrompt(
+            host: server.displayHost,
+            fingerprint: fingerprint,
+            isReplacement: isReplacement
+        )
     }
 
     private func handleLoadFailure(_ error: Error) {
@@ -276,7 +402,9 @@ extension BrowserModel: WKNavigationDelegate {
         if nsError.domain == NSURLErrorDomain,
             nsError.code == NSURLErrorServerCertificateUntrusted
         {
-            errorMessage = "The server certificate is not trusted. DSH Native never bypasses iOS TLS checks."
+            errorMessage =
+                "The server certificate is not trusted. DSH Native requires an explicit "
+                + "fingerprint review before a private certificate can be used."
         } else {
             errorMessage = nsError.localizedDescription
         }

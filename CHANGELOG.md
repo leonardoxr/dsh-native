@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-24
+
+### Added
+
+- Native iOS and Android companions with saved-server drawers, responsive mobile browser chrome, and secure WebView sessions.
+- Explicit per-server private/self-signed certificate trust: the app shows the host and SHA-256 fingerprint, re-prompts on certificate changes, marks manually trusted sessions, and supports revocation.
+
+### Security
+
+- Manual certificate exceptions remain scoped to one saved HTTPS origin and exact certificate fingerprint; hostname mismatches, expired certificates, invalid certificates, and non-HTTPS navigation remain blocked.
+- No pairing, QR provisioning, password proxy, LAN/public tunnel, cloudflared, relay, or JavaScript bridge features are included.
+
 ## [0.4.4] - 2026-08-24
 
 ### Fixed
