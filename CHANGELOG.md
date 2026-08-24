@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-08-24
+
+### Fixed
+
+- Publish exactly the documented release artifacts, excluding electron-builder debug metadata and unused macOS blockmaps from the upload bundle.
+
 ## [0.4.1] - 2026-08-24
 
 ### Fixed

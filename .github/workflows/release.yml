@@ -144,8 +144,10 @@ jobs:
             dist/*.zip
             dist/*.AppImage
             dist/*.deb
-            dist/*.blockmap
-            dist/*.yml
+            dist/DSH-Native-Setup-*.exe.blockmap
+            dist/latest.yml
+            dist/latest-mac.yml
+            dist/latest-linux.yml
 
   publish:
     name: Publish GitHub release
