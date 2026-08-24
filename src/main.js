@@ -7,7 +7,7 @@ const { pathToFileURL } = require('node:url')
 const fs = require('node:fs')
 const crypto = require('node:crypto')
 const { normalizeUrl } = require('./lib/normalize-url')
-const { LOCAL_DSH_URL, startLocalDsh, stopLocalDsh, waitForDsh } = require('./lib/local-dsh')
+const { LOCAL_DSH_URL, requestReady, startLocalDsh, stopLocalDsh, waitForDsh } = require('./lib/local-dsh')
 const { classifyNavigation } = require('./lib/navigation-policy')
 const { NotificationFeed } = require('./lib/notification-feed')
 const { createNotificationPresenter } = require('./lib/notification-presenter')
@@ -165,7 +165,18 @@ function ensureLocalDshRunning(timeoutMs = LOCAL_CONNECT_TIMEOUT_MS) {
     },
   })
   localDshProcess = child
-  return waitForDsh(LOCAL_DSH_URL, timeoutMs, child).catch((error) => {
+  return waitForDsh(LOCAL_DSH_URL, timeoutMs, child).catch(async (error) => {
+    // A second `dsh web` cannot bind while an instance already serves 3080.
+    // If something healthy answers anyway, use it instead of failing the card.
+    try {
+      if (await requestReady(LOCAL_DSH_URL)) {
+        stopLocalDsh(child)
+        if (localDshProcess === child) localDshProcess = null
+        return
+      }
+    } catch {
+      // fall through to the actionable error
+    }
     stopLocalDsh(child)
     if (localDshProcess === child) localDshProcess = null
     throw new Error(error.message + ' Make sure the existing dsh command is installed and port 3080 is available.')

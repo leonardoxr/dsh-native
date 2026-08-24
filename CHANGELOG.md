@@ -4,16 +4,31 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-24
+
 ### Added
 
+- Unified multi-server Workspace Home aggregating workspaces and live sessions from every saved server plus the managed local instance into one most-recent-first dashboard.
+- Per-server connection states with distinct Not authorized, No Companion, and Offline (tailnet) diagnostics and remediation hints.
+- Cached last-good snapshots per server for an instant dashboard paint, with age-labeled stale rows and live-always-wins refreshes.
+- Tailscale discovery: responsive tailnet peers running DSH are probed and offered as one-click MagicDNS HTTPS server additions.
+- Workspaces… menu action with Ctrl/Cmd+H returning to the aggregated dashboard from any connected server.
 - Native SwiftUI companion for iPhone and iPad with a saved HTTPS host picker and governed WebKit shell.
 - Deterministic iOS URL, navigation, persistence, and state tests plus reusable local-Mac SSH build scripts.
 - iOS privacy manifest, launch experience, original app icon, app-switcher privacy cover, and clear website-data controls.
+
+### Fixed
+
+- Register the shared presentation library in the Workspaces renderer so dashboard lists render instead of staying empty.
+- Treat an already-serving port 3080 as ready instead of failing managed local startup while another DSH Web instance answers.
+- Launch `dsh web` with --no-open so the managed instance no longer opens a duplicate system-browser tab.
 
 ### Security
 
 - Keep iOS remote content behind normal WebKit and system TLS checks with no JavaScript-to-native bridge.
 - Block automatic cross-origin main-frame navigation and open only user-activated safe external links.
+- Companion fetching and hosts access remain main-process-only behind the exact-frame sender guard; remote pages gain no privileged access.
+- Saved server addressing stays HTTPS-only, including MagicDNS URLs discovered on a tailnet.
 
 ## [0.1.1] - 2026-08-22
 
@@ -37,6 +52,7 @@ All notable changes to this project are documented here. The format is based on 
 - Remote pages run with context isolation and without Node.js integration.
 - Privileged host-management IPC is limited to the bundled local server picker.
 
-[Unreleased]: https://github.com/leonardoxr/dsh-native/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/leonardoxr/dsh-native/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/leonardoxr/dsh-native/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/leonardoxr/dsh-native/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/leonardoxr/dsh-native/releases/tag/v0.1.0

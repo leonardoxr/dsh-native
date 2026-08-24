@@ -73,4 +73,4 @@ function stopLocalDsh(child) {
   child.kill()
 }
 
-module.exports = { LOCAL_DSH_URL, startLocalDsh, stopLocalDsh, waitForDsh, localDshCommand, localDshArgs }
+module.exports = { LOCAL_DSH_URL, requestReady, startLocalDsh, stopLocalDsh, waitForDsh, localDshCommand, localDshArgs }
