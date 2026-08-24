@@ -14,11 +14,12 @@ DSH Native keeps frequently used web apps out of ordinary browser tabs. The repo
 
 - **Saved server list** — add, name, remove, edit, and switch between HTTPS endpoints.
 - **Unified Workspace Home** — every saved server's workspaces and live sessions in one most-recent-first dashboard, with per-server badges, connection states, cached offline snapshots, and automatic discovery of DSH servers on your Tailscale network.
+- **Workspace sidebar bridge** — managed DSH pages render the same cross-server Workspace model inside the Harness left panel through Companion; every bridge call is read-only or navigational and origin-checked against Local DSH plus saved servers.
 - **Fast return** — reconnects to the most recently used server on launch and preconnects while the window starts.
 - **Focused window** — external links open in the system browser instead of spawning extra app windows.
 - **Battery-aware background behavior** — hidden pages use Chromium throttling, dashboard polling pauses off-screen, and the native notification feed remains live in the main process.
 - **Native attention alerts** — companion events become deduplicated OS notifications for completed, blocked, failed, question, and approval states.
-- **Hardened boundary** — remote pages receive no native host-management capability, and cross-origin navigation opens in the system browser.
+- **Hardened boundary** — managed DSH pages receive only the origin-checked Workspace read/navigation bridge; no page receives server mutation, filesystem, credential, updater, or arbitrary native IPC capability, and cross-origin navigation opens in the system browser.
 - **Native mobile companions** — iOS and Android use platform WebView shells with safe-area-aware server drawers, no Electron runtime, and no third-party runtime dependencies.
 - **Explicit private-certificate trust** — iOS and Android show the exact HTTPS host and SHA-256 certificate fingerprint before allowing a per-server self-signed/private certificate exception; changed certificates require review again and every exception is revocable.
 

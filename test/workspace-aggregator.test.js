@@ -10,7 +10,9 @@ const HOST_B = { id: 'b', name: 'Beta', url: 'https://beta.example/', local: fal
 function ws(id, title, path, updatedAt, sessionIds = [], createdAt = null) {
   return { id, title, path, updatedAt, sessionIds, ...(createdAt ? { createdAt } : {}) };
 }
-function sess(id, createdAt) { return { id, title: null, cwd: null, createdAt }; }
+function sess(id, createdAt, title = null, cwd = null, updatedAt = undefined) {
+  return { id, title, cwd, createdAt, ...(updatedAt === undefined ? {} : { updatedAt }) }
+}
 function ok(workspaces, sessions) { return { ok: true, workspaces, sessions, failure: null }; }
 
 test('merges all servers into one most-recent-first stream', () => {
@@ -34,6 +36,12 @@ test('merges all servers into one most-recent-first stream', () => {
   assert.equal(middle.liveSessions, 0);
   assert.equal(orphanSessions.length, 1);
   assert.equal(orphanSessions[0].id, 's3');
+  assert.deepEqual(newest.sessions, [{
+    id: 's1',
+    title: '(untitled session)',
+    cwd: null,
+    updatedAt: 1717200000000,
+  }])
 });
 
 test('equal timestamps break ties deterministically by title, then server', () => {
@@ -63,6 +71,23 @@ test('missing sessions data keeps total counts and skips live enrichment', () =>
   ]);
   assert.equal(workspaceRows[0].totalSessions, 2);
   assert.equal(workspaceRows[0].liveSessions, null);
+})
+
+test('workspace sessions carry current labels and sort by updated activity', () => {
+  const { workspaceRows } = aggregateServers([
+    {
+      host: HOST_A,
+      result: ok(
+        [ws('a1', 'Project', '/project', 1000, ['older', 'newer'])],
+        [
+          sess('older', 100, 'Older', '/project', 200),
+          sess('newer', 100, 'Newer', '/project', 300),
+        ],
+      ),
+    },
+  ])
+  assert.deepEqual(workspaceRows[0].sessions.map((session) => session.id), ['newer', 'older'])
+  assert.equal(workspaceRows[0].sessions[0].title, 'Newer')
 })
 
 test('unusable timestamps fall back to createdAt, then epoch zero', () => {

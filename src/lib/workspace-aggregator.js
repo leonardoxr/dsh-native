@@ -28,16 +28,25 @@ function hostMeta(host) {
   }
 }
 
-function workspaceRow(host, workspace, liveSessionIds, sessionUpdatedAt) {
+function workspaceRow(host, workspace, sessionsById, sessionUpdatedAt) {
   const workspaceUpdatedAt = toEpoch(workspace.updatedAt) ?? toEpoch(workspace.createdAt) ?? 0
   const latestSessionAt = Array.isArray(workspace.sessionIds)
     ? workspace.sessionIds.reduce((latest, id) => Math.max(latest, sessionUpdatedAt?.get(id) ?? 0), 0)
     : 0
   const updatedAt = latestSessionAt > 0 ? latestSessionAt : workspaceUpdatedAt
   const totalSessions = Array.isArray(workspace.sessionIds) ? workspace.sessionIds.length : 0
-  const liveSessions = liveSessionIds
-    ? workspace.sessionIds.reduce((count, id) => count + (liveSessionIds.has(id) ? 1 : 0), 0)
-    : null
+  const sessions = sessionsById === null
+    ? null
+    : workspace.sessionIds
+      .map((id) => sessionsById.get(id))
+      .filter(Boolean)
+      .map((session) => ({
+        id: session.id,
+        title: session.title ?? '(untitled session)',
+        cwd: session.cwd ?? null,
+        updatedAt: toEpoch(session.updatedAt) ?? toEpoch(session.createdAt) ?? 0,
+      }))
+      .sort(sortRecency)
   return {
     kind: 'workspace',
     ...hostMeta(host),
@@ -47,7 +56,8 @@ function workspaceRow(host, workspace, liveSessionIds, sessionUpdatedAt) {
     createdAt: toEpoch(workspace.createdAt),
     updatedAt,
     totalSessions,
-    liveSessions,
+    liveSessions: sessions?.length ?? null,
+    sessions,
   }
 }
 
@@ -59,7 +69,7 @@ function sessionRow(host, session) {
     id: session.id,
     title: session.title ?? '(untitled session)',
     cwd: session.cwd ?? null,
-    createdAt: updatedAt,
+    createdAt: toEpoch(session.createdAt) ?? updatedAt,
     updatedAt,
   }
 }
@@ -86,8 +96,8 @@ function aggregateServers(entries) {
     if (!host || !result || result.ok !== true) continue
     const workspaces = Array.isArray(result.workspaces) ? result.workspaces : [];
     const sessions = Array.isArray(result.sessions) ? result.sessions : [];
-    const liveSessionIds = result.sessions !== null
-      ? new Set(sessions.map((session) => session.id))
+    const sessionsById = result.sessions !== null
+      ? new Map(sessions.map((session) => [session.id, session]))
       : null;
     const sessionUpdatedAt = result.sessions !== null
       ? new Map(sessions
@@ -99,7 +109,7 @@ function aggregateServers(entries) {
       for (const id of workspace.sessionIds) claimed.add(id);
     }
     for (const workspace of workspaces) {
-      workspaceRows.push(workspaceRow(host, workspace, liveSessionIds, sessionUpdatedAt));
+      workspaceRows.push(workspaceRow(host, workspace, sessionsById, sessionUpdatedAt));
     }
     for (const session of sessions) {
       if (!claimed.has(session.id)) orphanSessions.push(sessionRow(host, session));

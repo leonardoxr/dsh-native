@@ -26,3 +26,14 @@ if (window.location.protocol === 'file:') {
     },
   })
 }
+
+// Managed DSH pages receive only the read/navigation face needed to render
+// the native aggregate in their own sidebar. The main process validates the
+// sender origin against Local DSH and the saved-server list on every call.
+if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+  contextBridge.exposeInMainWorld('dshNativeWorkspaces', {
+    getSnapshot: () => ipcRenderer.invoke('workspace-sidebar:snapshot'),
+    refresh: () => ipcRenderer.invoke('workspace-sidebar:refresh'),
+    connect: (hostId) => ipcRenderer.invoke('workspace-sidebar:connect', { hostId }),
+  })
+}

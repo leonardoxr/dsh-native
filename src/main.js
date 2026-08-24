@@ -12,6 +12,7 @@ const { classifyNavigation } = require('./lib/navigation-policy')
 const { NotificationFeed } = require('./lib/notification-feed')
 const { createNotificationPresenter } = require('./lib/notification-presenter')
 const { assertHomeSender } = require('./lib/home-sender')
+const { assertWorkspaceSender } = require('./lib/native-workspace-bridge')
 const { fetchCompanionServerData, probeCandidates, isConnectivityFailure } = require('./lib/companion-client')
 const { aggregateServers } = require('./lib/workspace-aggregator')
 const { readTailscaleStatus, findPeerForHost, magicDnsHttpsUrl } = require('./lib/tailscale')
@@ -288,6 +289,10 @@ const presentNotification = createNotificationPresenter({
 
 function requireHome(event) {
   assertHomeSender(event.senderFrame?.url, homeUrl)
+}
+
+function requireWorkspacePage(event) {
+  assertWorkspaceSender(event.senderFrame?.url, LOCAL_DSH_URL, getHosts())
 }
 
 function loadHome(win) {
@@ -666,20 +671,36 @@ ipcMain.handle('home:refresh', (event) => {
   return queueRefresh(win.webContents);
 });
 
-ipcMain.handle('home:connect', async (event, { hostId } = {}) => {
-  requireHome(event);
-  const win = BrowserWindow.fromWebContents(event.sender);
-  if (!win || win.isDestroyed()) throw new Error('The native window is unavailable.');
+async function connectHost(event, hostId, requireSender) {
+  requireSender(event)
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win || win.isDestroyed()) throw new Error('The native window is unavailable.')
   if (hostId === LOCAL_HOST_ID) {
-    await startLocalDshWeb(win);
-    return;
+    await startLocalDshWeb(win)
+    return
   }
-  const host = getHosts().find((h) => h.id === hostId);
-  if (!host) throw new Error('Unknown server.');
-  host.lastUsedAt = Date.now();
-  saveHosts([host, ...getHosts().filter((h) => h.id !== host.id)]);
-  if (!loadHost(win, host.url)) throw new Error('The saved server URL is invalid.');
-});
+  const host = getHosts().find((candidate) => candidate.id === hostId)
+  if (!host) throw new Error('Unknown server.')
+  host.lastUsedAt = Date.now()
+  saveHosts([host, ...getHosts().filter((candidate) => candidate.id !== host.id)])
+  if (!loadHost(win, host.url)) throw new Error('The saved server URL is invalid.')
+}
+
+ipcMain.handle('home:connect', (event, { hostId } = {}) => connectHost(event, hostId, requireHome))
+
+ipcMain.handle('workspace-sidebar:snapshot', (event) => {
+  requireWorkspacePage(event)
+  return buildCachedSnapshot()
+})
+
+ipcMain.handle('workspace-sidebar:refresh', (event) => {
+  requireWorkspacePage(event)
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win || win.isDestroyed()) throw new Error('The native window is unavailable.')
+  return queueRefresh(win.webContents)
+})
+
+ipcMain.handle('workspace-sidebar:connect', (event, { hostId } = {}) => connectHost(event, hostId, requireWorkspacePage))
 
 // --- IPC: server management ----------------------------------------------------
 
