@@ -54,11 +54,28 @@ function localDshArgs() {
   return ['web', '--port', '3080', '--no-open']
 }
 
+function localDshLaunchSpec(platform = process.platform, comSpec = process.env.ComSpec) {
+  const command = localDshCommand(platform)
+  const args = localDshArgs()
+  if (platform === 'win32') {
+    // Node cannot spawn a .cmd shim directly (it throws EINVAL). Invoke the
+    // fixed npm command through cmd.exe without enabling shell interpolation.
+    return {
+      command: comSpec || 'cmd.exe',
+      args: ['/d', '/s', '/c', command, ...args],
+      options: { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true },
+    }
+  }
+  return {
+    command,
+    args,
+    options: { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true },
+  }
+}
+
 function startLocalDsh({ onExit } = {}) {
-  const child = spawn(localDshCommand(), localDshArgs(), {
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
-  })
+  const launch = localDshLaunchSpec()
+  const child = spawn(launch.command, launch.args, launch.options)
   let output = ''
   const capture = (chunk) => { output = (output + chunk.toString()).slice(-32768) }
   child.stdout.on('data', capture)
@@ -73,4 +90,4 @@ function stopLocalDsh(child) {
   child.kill()
 }
 
-module.exports = { LOCAL_DSH_URL, requestReady, startLocalDsh, stopLocalDsh, waitForDsh, localDshCommand, localDshArgs }
+module.exports = { LOCAL_DSH_URL, requestReady, startLocalDsh, stopLocalDsh, waitForDsh, localDshCommand, localDshArgs, localDshLaunchSpec }

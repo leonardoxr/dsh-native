@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-08-24
+
+### Fixed
+
+- Launch the Windows npm `dsh.cmd` shim through `cmd.exe` to avoid `spawn EINVAL`, while keeping direct `dsh` execution on macOS and Linux.
+
 ## [0.4.2] - 2026-08-24
 
 ### Fixed
