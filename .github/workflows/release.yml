@@ -144,6 +144,8 @@ jobs:
             dist/*.zip
             dist/*.AppImage
             dist/*.deb
+            dist/*.blockmap
+            dist/*.yml
 
   publish:
     name: Publish GitHub release
@@ -168,10 +170,14 @@ jobs:
           expected=(
             "DSH-Native-Setup-$version-win-x64.exe"
             "DSH-Native-Portable-$version-win-x64.exe"
+            "DSH-Native-Setup-$version-win-x64.exe.blockmap"
+            "latest.yml"
             "DSH-Native-$version-mac-arm64.dmg"
             "DSH-Native-$version-mac-arm64.zip"
+            "latest-mac.yml"
             "DSH-Native-$version-linux-x86_64.AppImage"
             "DSH-Native-$version-linux-amd64.deb"
+            "latest-linux.yml"
           )
           for artifact in "${expected[@]}"; do
             test -f "$artifact" || { echo "Missing release artifact: $artifact"; exit 1; }

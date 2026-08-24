@@ -38,11 +38,27 @@ A version tag builds these targets:
    git push origin vX.Y.Z
    ```
 
-The [Release workflow](../.github/workflows/release.yml) validates the version, builds each platform independently with electron-builder publishing disabled, verifies the complete artifact set, computes checksums, and publishes a GitHub release with generated notes.
+The [Release workflow](../.github/workflows/release.yml) validates the version, builds each platform independently with electron-builder publishing disabled, verifies the complete artifact set (binaries **and** updater manifests — a release without them silently breaks self-updates for installed users), computes checksums, and publishes a GitHub release with generated notes.
+
+## Self-updates
+
+The desktop app checks GitHub releases through electron-updater. Checks run automatically shortly after launch and then on a 30-minute cadence; downloading and installing only ever happen on an explicit user action from the Workspaces home card or **App → Check for Updates…**.
+
+Support matrix:
+
+| Package | Auto-update |
+| --- | --- |
+| Windows NSIS setup | Supported (silent install + relaunch) |
+| Windows portable | Disabled by design — no install location to update in place |
+| macOS DMG/ZIP | Disabled until Developer ID signing ships (see roadmap below); ad-hoc signatures cannot pass updater verification |
+| Linux AppImage | Supported |
+| Linux .deb | Disabled — update through your package manager |
+
+Channels mirror the release practice above: `stable` tracks full releases, `prerelease` opts into versions tagged with a prerelease segment (published as pre-releases). The choice persists in `update-settings.json` under the user data directory. Set `DSH_NATIVE_DISABLE_AUTO_UPDATE=1` to disable the engine entirely, and `DSH_NATIVE_UPDATE_FEED_URL` pointing at a local generic server to exercise updates during development.
 
 ## Verify publication
 
-- Confirm all seven release files are present: two Windows, two macOS, two Linux, plus the checksum file.
+- Confirm all eleven release files are present: two Windows binaries, the Windows blockmap, three feed manifests, two macOS, two Linux, plus the checksum file.
 - Download at least one artifact and verify its digest against `SHA256SUMS.txt`.
 - Confirm the Apple silicon macOS build passed strict `codesign` verification and detected an ad-hoc signature.
 - Smoke-test launch, adding an HTTPS server, connecting, and returning with **App → Servers…**.

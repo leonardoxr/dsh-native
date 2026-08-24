@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+### Added
+
+- Self-updating desktop app, modeled on T3 Code's updater: automatic feed checks shortly after launch and every 30 minutes, with download and install strictly behind explicit user actions.
+- Updates card in the Workspaces home showing live status, download progress, sanitized release notes, and a stable/pre-release channel switcher persisted across launches.
+- Restart-to-update flow that gracefully stops the managed local DSH instance before silently installing the pending build and relaunching.
+- Precise disabled states instead of silent failures: portable Windows builds, Linux .deb installs, unsigned macOS bundles, development checkouts, and `DSH_NATIVE_DISABLE_AUTO_UPDATE` all explain why updates are unavailable.
+- Updater feed manifests (`latest.yml`, `latest-mac.yml`, `latest-linux.yml`) and the Windows blockmap are now published with each release so installed apps can find new versions.
+
 ## [0.2.0] - 2026-08-24
 
 ### Added

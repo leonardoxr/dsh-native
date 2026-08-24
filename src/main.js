@@ -15,6 +15,8 @@ const { assertHomeSender } = require('./lib/home-sender')
 const { fetchCompanionServerData, probeCandidates, isConnectivityFailure } = require('./lib/companion-client')
 const { aggregateServers } = require('./lib/workspace-aggregator')
 const { readTailscaleStatus, findPeerForHost, magicDnsHttpsUrl } = require('./lib/tailscale')
+const { createUpdater } = require('./lib/updater')
+const { isAllowedChannel } = require('./lib/update-channels')
 
 // Keep rendering and timers at full rate even when the window is occluded or
 // minimized: the app must stay live and snap back instantly. Switches must be
@@ -41,6 +43,29 @@ for (const flag of [
 }
 
 if (process.platform === 'win32') app.setAppUserModelId('dev.leonardoxr.dshnative')
+
+// --- Self-update settings ----------------------------------------------------
+
+const updateSettingsFile = () => path.join(app.getPath('userData'), 'update-settings.json')
+
+function getStoredUpdateChannel() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(updateSettingsFile(), 'utf8'))
+    return typeof raw.channel === 'string' ? raw.channel : null
+  } catch {
+    // Missing or unreadable file falls back to the version-derived channel.
+    return null
+  }
+}
+
+function saveStoredUpdateChannel(channel) {
+  try {
+    fs.mkdirSync(path.dirname(updateSettingsFile()), { recursive: true })
+    fs.writeFileSync(updateSettingsFile(), JSON.stringify({ channel }, null, 2))
+  } catch (error) {
+    perfLog('update channel persist failed: ' + error.message)
+  }
+}
 
 /** Persisted server list: [{ id, name, url, lastUsedAt }] */
 const hostsFile = () => path.join(app.getPath('userData'), 'hosts.json')
@@ -130,6 +155,36 @@ const trustedOrigins = new WeakMap()
 let mainWindow = null;
 let notificationFeed = null;
 let localDshProcess = null;
+let appIsQuitting = false;
+
+/** Self-update service; broadcasts state snapshots to every home window. */
+const updater = createUpdater({
+  appVersion: app.getVersion(),
+  hostArch: process.arch,
+  resourcesPath: process.resourcesPath,
+  platform: process.platform,
+  isDevelopment: !app.isPackaged,
+  isPackaged: app.isPackaged,
+  runningAppImage: Boolean(process.env.APPIMAGE),
+  runningPortable: Boolean(process.env.PORTABLE_EXECUTABLE_FILE),
+  disabledByEnv: ['1', 'true', 'yes'].includes(String(process.env.DSH_NATIVE_DISABLE_AUTO_UPDATE ?? '').toLowerCase()),
+  feedUrlOverride: process.env.DSH_NATIVE_UPDATE_FEED_URL || '',
+  log: perfLog,
+  broadcast: (snapshot) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('updates:state', snapshot)
+    }
+  },
+  readStoredChannel: getStoredUpdateChannel,
+  writeStoredChannel: saveStoredUpdateChannel,
+  onBeforeInstall: async () => {
+    // Graceful shutdown of everything the app spawned before the installer
+    // takes over; mirrors T3 Code stopping its backend pool pre-install.
+    notificationFeed?.stop()
+    stopLocalDsh(localDshProcess)
+  },
+  isQuitting: () => appIsQuitting,
+})
 
 const presentNotification = createNotificationPresenter({
   Notification,
@@ -263,6 +318,9 @@ function showHome() {
 app.whenReady().then(() => {
   notificationFeed = new NotificationFeed({ onNotification: presentNotification })
 
+  // Discovery starts on its own; failures never block app startup.
+  updater.configure().catch((error) => perfLog('updater configure failed: ' + error.message))
+
   const mostRecent = getHosts()
     .slice()
     .sort((a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0))[0]
@@ -283,6 +341,8 @@ app.whenReady().then(() => {
 })
 
 app.on('before-quit', () => {
+  appIsQuitting = true
+  updater.dispose()
   notificationFeed?.stop()
   stopLocalDsh(localDshProcess)
 })
@@ -530,6 +590,34 @@ ipcMain.handle('tailnet:add-server', (event, { dnsName, name } = {}) => {
   return addHostCore(typeof name === 'string' ? name : '', url);
 });
 
+// --- IPC: self-updates --------------------------------------------------------
+
+ipcMain.handle('updates:get-state', (event) => {
+  requireHome(event)
+  return updater.getState()
+});
+
+ipcMain.handle('updates:check', (event) => {
+  requireHome(event)
+  return updater.check('web-ui')
+});
+
+ipcMain.handle('updates:download', (event) => {
+  requireHome(event)
+  return updater.download()
+});
+
+ipcMain.handle('updates:install', (event) => {
+  requireHome(event)
+  return updater.install()
+});
+
+ipcMain.handle('updates:set-channel', (event, channel) => {
+  requireHome(event)
+  if (!isAllowedChannel(channel)) throw new Error('Unknown update channel.')
+  return updater.setChannel(channel)
+});
+
 // Minimal menu so users can always get back to the aggregated dashboard.
 Menu.setApplicationMenu(
   Menu.buildFromTemplate([
@@ -537,6 +625,7 @@ Menu.setApplicationMenu(
       label: 'App',
       submenu: [
         { label: 'Workspaces…', accelerator: 'CmdOrCtrl+H', click: () => showHome() },
+        { label: 'Check for Updates…', click: () => { void updater.check('menu').catch(() => {}) } },
         { type: 'separator' },
         process.platform === 'darwin'
           ? { role: 'quit' }

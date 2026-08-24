@@ -297,3 +297,151 @@ setInterval(() => { void refresh(); }, 60000);
 setInterval(() => {
   if (lastSnapshot && !refreshing && document.visibilityState === 'visible') render(lastSnapshot);
 }, 30000);
+
+// --- Self-updates --------------------------------------------------------------
+
+const updatesSection = document.getElementById('updates-section')
+const updateDotEl = document.getElementById('update-dot')
+const updateTitleEl = document.getElementById('update-title')
+const updateMetaEl = document.getElementById('update-meta')
+const updateProgressEl = document.getElementById('update-progress')
+const updateProgressBarEl = document.getElementById('update-progress-bar')
+const updateNotesEl = document.getElementById('update-notes')
+const updateChannelEl = document.getElementById('update-channel')
+const updateCheckBtn = document.getElementById('update-check')
+const updateActionBtn = document.getElementById('update-action')
+
+let lastUpdateState = null
+
+function formatCheckedAt(iso) {
+  if (!iso) return ''
+  try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) } catch { return '' }
+}
+
+/** Paint one pushed or fetched update snapshot; mirrors the main-process machine. */
+function presentUpdateState(state) {
+  if (!state) return
+  lastUpdateState = state
+  updatesSection.hidden = false
+
+  const tone = ({
+    checking: 'tone-busy',
+    available: 'tone-busy',
+    downloading: 'tone-busy',
+    'up-to-date': 'tone-ok',
+    downloaded: 'tone-ok',
+    error: 'tone-bad',
+  })[state.status] ?? 'tone-idle'
+  updateDotEl.className = 'dot ' + tone + (state.status === 'checking' || state.status === 'downloading' ? ' spin' : '')
+
+  let title = 'Updates'
+  let meta = ''
+  switch (state.status) {
+    case 'disabled':
+      title = 'Automatic updates off'
+      meta = state.message || 'This build cannot check for updates on its own.'
+      break
+    case 'idle':
+      title = 'DSH Native v' + state.currentVersion
+      break
+    case 'checking':
+      title = 'Checking for updates…'
+      break
+    case 'up-to-date':
+      title = 'Up to date'
+      meta = 'v' + state.currentVersion + (state.checkedAt ? ' · checked ' + formatCheckedAt(state.checkedAt) : '')
+      break
+    case 'available':
+      title = 'Update available — v' + state.availableVersion
+      meta = 'Running v' + state.currentVersion
+      break
+    case 'downloading':
+      title = 'Downloading v' + state.availableVersion + '…'
+      meta = state.downloadPercent === null ? '' : Math.floor(state.downloadPercent) + '%'
+      break
+    case 'downloaded':
+      title = 'Ready to install v' + state.downloadedVersion
+      meta = 'Restart to finish updating'
+      break
+    case 'error':
+      title = state.errorContext === 'download' ? 'Download failed'
+        : state.errorContext === 'install' ? 'Install failed' : 'Update check failed'
+      meta = state.message ?? ''
+      break
+  }
+  updateTitleEl.textContent = title
+  updateMetaEl.textContent = meta
+  updateMetaEl.hidden = meta === ''
+
+  if (state.status === 'downloading' && state.downloadPercent !== null) {
+    updateProgressEl.hidden = false
+    updateProgressBarEl.style.width = Math.min(100, Math.max(0, state.downloadPercent)) + '%'
+  } else {
+    updateProgressEl.hidden = true
+  }
+
+  const notes = Array.isArray(state.releaseNotes) ? state.releaseNotes : []
+  if ((state.status === 'available' || state.status === 'downloaded') && notes.length > 0) {
+    updateNotesEl.replaceChildren(...notes.map((group) => {
+      const li = el('li', 'note-group')
+      li.append(el('strong', 'note-version', 'v' + group.version))
+      const items = el('ul', 'note-items')
+      for (const item of group.items ?? []) items.append(el('li', '', item))
+      li.append(items)
+      return li
+    }))
+    updateNotesEl.hidden = false
+  } else {
+    updateNotesEl.replaceChildren()
+    updateNotesEl.hidden = true
+  }
+
+  let actionLabel = ''
+  let actionKind = null
+  if (state.status === 'available') { actionLabel = 'Download'; actionKind = 'download' }
+  else if (state.status === 'downloaded') { actionLabel = 'Restart to update'; actionKind = 'install' }
+  else if (state.status === 'error' && state.canRetry) { actionLabel = 'Try again'; actionKind = 'retry' }
+  updateActionBtn.hidden = actionKind === null
+  updateActionBtn.classList.toggle('primary', actionKind === 'install')
+  updateActionBtn.textContent = actionLabel
+  updateActionBtn.onclick = () => {
+    if (actionKind === null) return
+    updateActionBtn.disabled = true
+    const call = actionKind === 'download' ? Dsh.downloadUpdate()
+      : actionKind === 'install' ? Dsh.installUpdate() : Dsh.checkForUpdates()
+    Promise.resolve(call)
+      .then((result) => presentUpdateState(result && result.state ? result.state : lastUpdateState))
+      .catch((err) => showError(err.message ?? 'The update action failed.'))
+      .finally(() => { updateActionBtn.disabled = false })
+  }
+
+  if (document.activeElement !== updateChannelEl) updateChannelEl.value = state.channel
+  const busy = state.status === 'checking' || state.status === 'downloading'
+  updateChannelEl.disabled = !state.enabled || busy
+  updateCheckBtn.hidden = !state.enabled || busy || state.status === 'downloaded'
+}
+
+updateChannelEl.addEventListener('change', async () => {
+  clearError()
+  try {
+    presentUpdateState(await Dsh.setUpdateChannel(updateChannelEl.value))
+  } catch (err) {
+    showError(err.message ?? 'Could not switch the update channel.')
+    if (lastUpdateState) updateChannelEl.value = lastUpdateState.channel
+  }
+})
+
+updateCheckBtn.addEventListener('click', async () => {
+  clearError()
+  updateCheckBtn.disabled = true
+  try {
+    presentUpdateState((await Dsh.checkForUpdates()).state)
+  } catch (err) {
+    showError(err.message ?? 'The update check failed.')
+  } finally {
+    updateCheckBtn.disabled = false
+  }
+})
+
+Dsh.onUpdateState(presentUpdateState)
+Dsh.getUpdateState().then(presentUpdateState).catch(() => {})

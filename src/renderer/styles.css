@@ -189,3 +189,41 @@ input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
 .error { color: var(--bad); font-size: 13px; }
 .hint { color: var(--text-dim); font-size: 13px; }
+
+/* Self-updates */
+#updates-section { margin-bottom: 16px; }
+.update-row { flex-wrap: wrap; }
+.channel-select {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 4px 8px;
+}
+.progress-wrap {
+  width: 100%;
+  max-width: 280px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: var(--surface-hover);
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  width: 0;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 200ms ease;
+}
+.notes {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.note-version { display: block; margin-top: 4px; color: var(--text); }

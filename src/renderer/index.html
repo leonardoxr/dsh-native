@@ -14,6 +14,24 @@
     </header>
     <p id="banner" class="banner" hidden></p>
 
+    <section id="updates-section" aria-label="Updates" hidden>
+      <div class="row-item update-row">
+        <span id="update-dot" class="dot tone-idle"></span>
+        <div class="row-main">
+          <span id="update-title" class="row-title">Updates</span>
+          <span id="update-meta" class="meta" hidden></span>
+          <div id="update-progress" class="progress-wrap" hidden><div id="update-progress-bar" class="progress-bar"></div></div>
+          <ul id="update-notes" class="notes" hidden></ul>
+        </div>
+        <select id="update-channel" class="channel-select" title="Update channel">
+          <option value="stable">Stable</option>
+          <option value="prerelease">Pre-releases</option>
+        </select>
+        <button id="update-check" type="button" class="small">Check</button>
+        <button id="update-action" type="button" class="small primary" hidden>Download</button>
+      </div>
+    </section>
+
     <section id="workspace-section" aria-label="Workspaces">
       <ul id="workspace-list" class="cards"></ul>
       <p id="empty-state" class="hint" hidden>Nothing here yet. Connect a server, add one below, or start local DSH Web.</p>

@@ -6,19 +6,26 @@
 // segment (the release workflow marks those GitHub releases "pre-release"),
 // so the two channels map directly onto electron-updater's allowPrerelease.
 
-const CHANNELS = /** @type {const} */ (['stable', 'prerelease'])
+const CHANNELS = ['stable', 'prerelease']
 
-const PRERELEASE_PATTERN = /^[0-9A-Za-z.+-]+?-[0-9A-Za-z.-]+(?:\+[0-9A-Za-z.-]+)?$/
-
-/** True when the version string carries a prerelease segment (e.g. 1.2.0-beta.3). */
+/**
+ * True when the version string carries a semver prerelease segment
+ * (e.g. 1.2.0-beta.3). The core must be numeric and every dot-separated
+ * prerelease identifier must be alphanumeric, so date-like strings such as
+ * 2024.01 do not slip through.
+ */
 function isPrereleaseVersion(version) {
   if (typeof version !== 'string') return false
   const bare = version.startsWith('v') ? version.slice(1) : version
-  if (!PRERELEASE_PATTERN.test(bare)) return false
-  // A lone hyphen in something like a date (2024.01-02) is not a semver
-  // prerelease; require the segment after the hyphen to look like one.
-  const pre = bare.split('+')[0].split('-').slice(1)
-  return pre.length > 0 && pre.every((part) => /^[0-9A-Za-z-]+$/.test(part))
+  const plusIndex = bare.indexOf('+')
+  const core = plusIndex === -1 ? bare : bare.slice(0, plusIndex)
+  const dashIndex = core.indexOf('-')
+  if (dashIndex <= 0 || dashIndex === core.length - 1) return false
+  if (!/^\d+(?:\.\d+){0,2}$/.test(core.slice(0, dashIndex))) return false
+  return core
+    .slice(dashIndex + 1)
+    .split('.')
+    .every((part) => /^[0-9A-Za-z-]+$/.test(part))
 }
 
 function isAllowedChannel(channel) {
