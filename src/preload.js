@@ -2,11 +2,20 @@
 
 const { contextBridge, ipcRenderer } = require('electron')
 
+// DSH client modules execute in Electron's isolated world (id 999), while
+// page code runs in the main world. Publish the same narrow, sender-checked
+// faces to both worlds so the Native sidebar can consume them.
+const ISOLATED_WORLD_ID = 999
+function expose(name, value) {
+  contextBridge.exposeInMainWorld(name, value)
+  contextBridge.exposeInIsolatedWorld(ISOLATED_WORLD_ID, name, value)
+}
+
 // Preload can execute before Electron has committed the target navigation, so
 // protocol-gating the bridge here leaves the next document without its face.
 // Expose the narrow faces unconditionally; every IPC handler enforces the
 // exact home or managed-server sender before returning data or acting.
-contextBridge.exposeInMainWorld('dshNative', {
+expose('dshNative', {
   addHost: (name, url) => ipcRenderer.invoke('hosts:add', { name, url }),
   removeHost: (id) => ipcRenderer.invoke('hosts:remove', id),
   addTailnetServer: (dnsName, name) => ipcRenderer.invoke('tailnet:add-server', { dnsName, name }),
@@ -30,7 +39,7 @@ contextBridge.exposeInMainWorld('dshNative', {
 // Managed DSH pages receive only the read/navigation face needed to render
 // the native aggregate in their own sidebar. The main process validates the
 // sender origin against Local DSH and the saved-server list on every call.
-contextBridge.exposeInMainWorld('dshNativeWorkspaces', {
+expose('dshNativeWorkspaces', {
   getSnapshot: () => ipcRenderer.invoke('workspace-sidebar:snapshot'),
   refresh: () => ipcRenderer.invoke('workspace-sidebar:refresh'),
   connect: (hostId) => ipcRenderer.invoke('workspace-sidebar:connect', { hostId }),
@@ -38,7 +47,7 @@ contextBridge.exposeInMainWorld('dshNativeWorkspaces', {
 
 // Read-only native self-update state (snapshot + push). The main process gates
 // the read to managed workspace origins; update actions stay home-screen only.
-contextBridge.exposeInMainWorld('dshNativeUpdate', {
+expose('dshNativeUpdate', {
   getState: () => ipcRenderer.invoke('native-update:get-state'),
   onState: (callback) => {
     const listener = (_event, state) => callback(state)

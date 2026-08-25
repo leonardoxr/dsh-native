@@ -8,6 +8,7 @@ const vm = require('node:vm')
 
 function loadPreload(protocol) {
   const exposed = new Map()
+  const isolated = new Map()
   const invoked = []
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'preload.js'), 'utf8')
   const sandbox = {
@@ -17,6 +18,10 @@ function loadPreload(protocol) {
         contextBridge: {
           exposeInMainWorld(name, value) {
             exposed.set(name, value)
+          },
+          exposeInIsolatedWorld(worldId, name, value) {
+            assert.equal(worldId, 999)
+            isolated.set(name, value)
           },
         },
         ipcRenderer: {
@@ -32,18 +37,20 @@ function loadPreload(protocol) {
     window: { location: { protocol } },
   }
   vm.runInNewContext(source, sandbox, { filename: 'src/preload.js' })
-  return { exposed, invoked }
+  return { exposed, isolated, invoked }
 }
 
 test('preload exposes every narrow bridge before target navigation commits', async () => {
-  const { exposed, invoked } = loadPreload('about:')
+  const { exposed, isolated, invoked } = loadPreload('about:')
 
   assert.deepEqual([...exposed.keys()], ['dshNative', 'dshNativeWorkspaces', 'dshNativeUpdate'])
+  assert.deepEqual([...isolated.keys()], ['dshNative', 'dshNativeWorkspaces', 'dshNativeUpdate'])
   await exposed.get('dshNativeWorkspaces').getSnapshot()
   assert.deepEqual(invoked[0], { channel: 'workspace-sidebar:snapshot', args: [] })
 })
 
 test('preload exposes the same bridge faces for managed pages', () => {
-  const { exposed } = loadPreload('https:')
+  const { exposed, isolated } = loadPreload('https:')
   assert.deepEqual([...exposed.keys()], ['dshNative', 'dshNativeWorkspaces', 'dshNativeUpdate'])
+  assert.deepEqual([...isolated.keys()], ['dshNative', 'dshNativeWorkspaces', 'dshNativeUpdate'])
 })

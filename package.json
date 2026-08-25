@@ -1,6 +1,6 @@
 {
   "name": "dsh-native",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "A focused desktop shell for HTTPS web apps, with saved servers and fast reconnects.",
   "main": "src/main.js",
   "desktopName": "dsh-native.desktop",

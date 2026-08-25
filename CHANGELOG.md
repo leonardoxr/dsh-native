@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-08-25
+
+### Fixed
+
+- Expose the Native workspace bridge to both the page and DSH client-module worlds so the normal left sidebar can merge saved-server workspaces.
+
 ## [0.7.1] - 2026-08-25
 
 ### Fixed
@@ -135,7 +141,8 @@ All notable changes to this project are documented here. The format is based on 
 - Remote pages run with context isolation and without Node.js integration.
 - Privileged host-management IPC is limited to the bundled local server picker.
 
-[Unreleased]: https://github.com/leonardoxr/dsh-native/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/leonardoxr/dsh-native/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/leonardoxr/dsh-native/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/leonardoxr/dsh-native/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/leonardoxr/dsh-native/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/leonardoxr/dsh-native/compare/v0.5.1...v0.6.0
