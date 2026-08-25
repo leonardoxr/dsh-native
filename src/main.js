@@ -774,3 +774,11 @@ ipcMain.handle('updates:set-channel', (event, channel) => {
   return updater.setChannel(channel)
 });
 
+// Read-only native self-update state for managed web pages (the harness sidebar
+// renders it as a card). Actions stay gated to the home screen above; this only
+// mirrors the current snapshot and the broadcast push every window already gets.
+ipcMain.handle('native-update:get-state', (event) => {
+  requireWorkspacePage(event)
+  return updater.getState()
+});
+

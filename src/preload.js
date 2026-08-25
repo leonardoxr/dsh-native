@@ -36,4 +36,14 @@ if (window.location.protocol === 'http:' || window.location.protocol === 'https:
     refresh: () => ipcRenderer.invoke('workspace-sidebar:refresh'),
     connect: (hostId) => ipcRenderer.invoke('workspace-sidebar:connect', { hostId }),
   })
+  // Read-only native self-update state (snapshot + push). The main process gates
+  // the read to managed workspace origins; update actions stay home-screen only.
+  contextBridge.exposeInMainWorld('dshNativeUpdate', {
+    getState: () => ipcRenderer.invoke('native-update:get-state'),
+    onState: (callback) => {
+      const listener = (_event, state) => callback(state)
+      ipcRenderer.on('updates:state', listener)
+      return () => ipcRenderer.removeListener('updates:state', listener)
+    },
+  })
 }
