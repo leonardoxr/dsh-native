@@ -4,6 +4,30 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-08-25
+
+### Fixed
+
+- Expose Native bridge faces after navigation so managed DSH pages can render aggregated workspaces in the normal sidebar.
+
+## [0.7.0] - 2026-08-25
+
+### Added
+
+- Expose read-only Native self-update state to managed web pages.
+
+## [0.6.0] - 2026-08-24
+
+### Added
+
+- Bridge Native workspaces into the DSH sidebar.
+
+## [0.5.1] - 2026-08-24
+
+### Fixed
+
+- Sort workspaces by latest session activity.
+
 ## [0.5.0] - 2026-08-24
 
 ### Added
@@ -111,7 +135,17 @@ All notable changes to this project are documented here. The format is based on 
 - Remote pages run with context isolation and without Node.js integration.
 - Privileged host-management IPC is limited to the bundled local server picker.
 
-[Unreleased]: https://github.com/leonardoxr/dsh-native/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/leonardoxr/dsh-native/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/leonardoxr/dsh-native/compare/v0.7.0...v0.7.1
+[0.7.0]: https://github.com/leonardoxr/dsh-native/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/leonardoxr/dsh-native/compare/v0.5.1...v0.6.0
+[0.5.1]: https://github.com/leonardoxr/dsh-native/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/leonardoxr/dsh-native/compare/v0.4.4...v0.5.0
+[0.4.4]: https://github.com/leonardoxr/dsh-native/compare/v0.4.3...v0.4.4
+[0.4.3]: https://github.com/leonardoxr/dsh-native/compare/v0.4.2...v0.4.3
+[0.4.2]: https://github.com/leonardoxr/dsh-native/compare/v0.4.1...v0.4.2
+[0.4.1]: https://github.com/leonardoxr/dsh-native/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/leonardoxr/dsh-native/compare/v0.2.0...v0.4.0
 [0.2.0]: https://github.com/leonardoxr/dsh-native/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/leonardoxr/dsh-native/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/leonardoxr/dsh-native/releases/tag/v0.1.0
